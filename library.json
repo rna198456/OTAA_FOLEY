@@ -1,0 +1,57 @@
+{
+  "categories": [
+    {
+      "id": "madera",
+      "label": "Madera",
+      "emoji": "🪵",
+      "color": "#8B5E3C",
+      "samples": [
+        { "file": "samples/madera/tablon_01.wav", "label": "Tablón 1" },
+        { "file": "samples/madera/tablon_02.wav", "label": "Tablón 2" },
+        { "file": "samples/madera/tablon_03.wav", "label": "Tablón 3" }
+      ]
+    },
+    {
+      "id": "parquet",
+      "label": "Parquet",
+      "emoji": "🪵",
+      "color": "#A0724A",
+      "samples": [
+        { "file": "samples/madera/parquet_01.wav", "label": "Parquet 1" },
+        { "file": "samples/madera/parquet_02.wav", "label": "Parquet 2" }
+      ]
+    },
+    {
+      "id": "cemento",
+      "label": "Cemento",
+      "emoji": "🏗️",
+      "color": "#6B6B6B",
+      "samples": [
+        { "file": "samples/cemento/cemento_01.wav", "label": "Cemento 1" },
+        { "file": "samples/cemento/cemento_02.wav", "label": "Cemento 2" },
+        { "file": "samples/cemento/cemento_03.wav", "label": "Cemento 3" }
+      ]
+    },
+    {
+      "id": "grava",
+      "label": "Grava",
+      "emoji": "🪨",
+      "color": "#9B8B6A",
+      "samples": [
+        { "file": "samples/grava/grava_01.wav", "label": "Grava 1" },
+        { "file": "samples/grava/grava_02.wav", "label": "Grava 2" },
+        { "file": "samples/grava/grava_03.wav", "label": "Grava 3" }
+      ]
+    },
+    {
+      "id": "metal",
+      "label": "Metal",
+      "emoji": "⚙️",
+      "color": "#5A8A9F",
+      "samples": [
+        { "file": "samples/metal/metal_01.wav", "label": "Metal 1" },
+        { "file": "samples/metal/metal_02.wav", "label": "Metal 2" }
+      ]
+    }
+  ]
+}

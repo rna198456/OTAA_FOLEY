@@ -2,7 +2,9 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#111112" />
   <title>Foley Recorder · Cátedra Corti</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -11,82 +13,87 @@
 </head>
 <body>
 
-<!-- ══ HEADER ══════════════════════════════════════════════════════════════ -->
 <header id="app-header">
   <div class="header-left">
     <div class="logo-box">👣</div>
     <div class="header-titles">
       <span class="app-name">FOLEY RECORDER</span>
-      <span class="app-sub">Oficios y Técnicas de las Artes Audiovisuales · Cátedra Corti</span>
+      <span class="app-sub">Oficios y Técnicas · Cátedra Corti</span>
     </div>
   </div>
   <div class="header-right">
-    <div id="rec-indicator" class="rec-indicator hidden">
-      <span class="rec-dot"></span>REC
-    </div>
+    <div id="rec-indicator"  class="rec-indicator hidden"><span class="rec-dot"></span><span>REC</span></div>
+    <div id="play-indicator" class="play-indicator hidden"><span>▶</span><span>PLAY</span></div>
     <div id="timecode" class="timecode">00:00.00</div>
+    <label class="btn btn-ghost btn-sm">+ Video
+      <input type="file" id="video-file-input" accept="video/*" style="display:none" />
+    </label>
   </div>
 </header>
 
-<!-- ══ BODY ════════════════════════════════════════════════════════════════ -->
-<div id="app-body">
+<main id="app-main">
 
-  <!-- Left: video + waveform + transport -->
-  <div id="left-panel">
-
-    <!-- Video drop zone -->
+  <div id="video-col">
     <div id="video-zone" class="dropzone">
-      <video id="video-el" style="display:none"></video>
+      <video id="video-el" playsinline></video>
       <div id="drop-hint">
         <div class="drop-icon">🎬</div>
         <div class="drop-label">Arrastrá un video aquí</div>
-        <label class="drop-link">
-          o seleccioná archivo
-          <input type="file" id="video-file-input" accept="video/*" style="display:none" />
+        <label class="drop-link">o seleccioná archivo
+          <input type="file" id="video-file-input-2" accept="video/*" style="display:none" />
         </label>
       </div>
     </div>
 
-    <!-- Waveform + transport -->
-    <div id="transport-panel">
-      <canvas id="waveform" height="72"></canvas>
-      <div id="progress-bar-wrap"><div id="progress-bar-fill"></div></div>
-
+    <div id="timeline-panel">
+      <div id="waveform-wrap">
+        <canvas id="waveform"></canvas>
+        <div id="event-tooltip" class="event-tooltip hidden">
+          <span id="tooltip-name"></span>
+          <button id="tooltip-change" class="tooltip-btn" title="Cambiar sample">⇄</button>
+          <button id="tooltip-delete" class="tooltip-btn tooltip-delete" title="Eliminar">✕</button>
+        </div>
+      </div>
+      <div id="progress-wrap"><div id="progress-fill"></div></div>
       <div id="controls-row">
-        <button id="btn-record" class="btn btn-amber" disabled>● GRABAR</button>
-        <button id="btn-stop"   class="btn btn-red"   disabled style="display:none">■ DETENER</button>
-        <button id="btn-export" class="btn btn-ghost"  disabled>↓ EXPORTAR WAV</button>
+        <button id="btn-record"  class="btn btn-amber" disabled>● GRABAR</button>
+        <button id="btn-stop"    class="btn btn-red"   disabled style="display:none">■ DETENER</button>
+        <button id="btn-preview" class="btn btn-ghost" disabled>▶ ESCUCHAR</button>
+        <button id="btn-export"  class="btn btn-ghost" disabled>↓ WAV</button>
         <span   id="export-status" class="export-status"></span>
         <span   id="event-count"   class="event-count">0 eventos</span>
       </div>
-
       <div id="hint-bar" class="hint-bar hidden">
-        ESPACIO = <span id="hint-sample-name">—</span> · Click en cualquier sample para activar
+        ESPACIO = <span id="hint-name">—</span>&nbsp;<span id="hint-rr" class="hint-rr"></span>
       </div>
     </div>
   </div>
 
-  <!-- Right: sample library -->
-  <div id="right-panel">
+  <div id="library-col">
     <div id="library-header">
-      <span class="section-label">BIBLIOTECA</span>
-      <label class="link-btn">
-        + Agregar WAV/MP3
-        <input type="file" id="custom-sample-input" accept="audio/*" style="display:none" />
+      <span class="section-label">SUPERFICIE</span>
+      <label class="link-btn">+ Mis samples
+        <input type="file" id="custom-sample-input" accept="audio/*" multiple style="display:none" />
       </label>
     </div>
-
-    <div id="library-scroll">
-      <!-- Categories injected by JS -->
-    </div>
-
+    <div id="library-loading" class="library-loading"><span class="loading-spinner"></span>Cargando…</div>
+    <div id="library-grid"></div>
     <div id="session-log-wrap">
-      <div class="section-label" style="padding:10px 16px 6px">SESIÓN ACTUAL</div>
+      <div class="section-label" style="padding:8px 14px 4px">SESIÓN</div>
       <div id="session-log"></div>
     </div>
   </div>
 
-</div><!-- /app-body -->
+</main>
+
+<!-- Modal: cambiar sample de un evento -->
+<div id="modal-overlay" class="modal-overlay hidden">
+  <div id="modal-box" class="modal-box">
+    <div class="modal-title">Cambiar sample del evento</div>
+    <div id="modal-grid" class="modal-grid"></div>
+    <button id="modal-cancel" class="btn btn-ghost btn-sm" style="margin-top:14px;width:100%">Cancelar</button>
+  </div>
+</div>
 
 <script src="audio.js"></script>
 <script src="app.js"></script>

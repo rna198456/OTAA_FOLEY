@@ -1,60 +1,119 @@
-# Foley Recorder 👣
+# Foley Recorder v2 👣
+**Oficios y Técnicas de las Artes Audiovisuales · Cátedra Corti**
 
 Herramienta web para grabación de Foley sincronizada con video.  
-**Oficios y Técnicas de las Artes Audiovisuales · Cátedra Corti**
+Sin dependencias externas. Vanilla JS puro. Funciona en desktop y mobile.
 
 ---
 
-## Cómo funciona
+## Flujo de trabajo
 
-1. **Cargá un video** (arrastrando o con el selector)
-2. **Elegí un sample** de la biblioteca (o cargá tus propios WAV/MP3)
-3. Presioná **● GRABAR** → el video arranca desde el inicio
-4. **Clickeá los samples** (o usá `Espacio` para el último seleccionado) en sincronía con la imagen
-5. Presioná **■ DETENER**
-6. Presioná **↓ EXPORTAR WAV** → descarga un `.wav` renderizado offline, sin latencia
+1. **Cargá un video** (drag & drop o botón)
+2. **Seleccioná una superficie** de la biblioteca
+3. **● GRABAR** → el video arranca desde el inicio
+4. **Tocá los botones** (o `Espacio` para el último seleccionado) en sincronía
+5. **■ DETENER**
+6. **▶ ESCUCHAR** → preview del resultado
+7. **Editá en la timeline** si necesitás ajustar timing
+8. **↓ WAV** → exporta el audio renderizado offline, sin latencia
 
-## Por qué no hay latencia en el export
-
-El audio que escuchás durante la grabación es solo **monitoreo en tiempo real**.  
-Lo que se guarda es el **log de eventos**: qué sample se disparó y en qué segundo del video.  
-Al exportar, se usa `OfflineAudioContext` para renderizar todos los eventos en sus posiciones exactas — sin pasar por el event loop del browser.
+---
 
 ## Estructura de archivos
 
 ```
 foley-recorder/
-├── index.html   — UI principal
-├── style.css    — Estilos
-├── audio.js     — Motor de audio: síntesis, carga de usuario, render offline, encoder WAV
-├── app.js       — Lógica de app: video, biblioteca, grabación, waveform, export
-└── README.md
+├── index.html
+├── style.css
+├── audio.js         ← motor de audio: síntesis, carga, render offline, encoder WAV
+├── app.js           ← UI, grabación, edición, timeline, modal
+├── library.json     ← declara las categorías y archivos de samples
+├── README.md
+└── samples/
+    ├── madera/
+    │   ├── tablon_01.wav
+    │   ├── tablon_02.wav
+    │   └── tablon_03.wav
+    ├── cemento/
+    │   ├── cemento_01.wav
+    │   ├── cemento_02.wav
+    │   └── cemento_03.wav
+    ├── grava/
+    │   ├── grava_01.wav
+    │   ├── grava_02.wav
+    │   └── grava_03.wav
+    └── metal/
+        ├── metal_01.wav
+        └── metal_02.wav
 ```
 
-No tiene dependencias externas ni build step. Vanilla JS puro.
+---
+
+## Cómo agregar tus samples al servidor
+
+1. Copiá tus archivos WAV en la carpeta correspondiente de `samples/`
+2. Editá `library.json` y declaralos:
+
+```json
+{
+  "id": "madera",
+  "label": "Madera",
+  "emoji": "🪵",
+  "color": "#8B5E3C",
+  "samples": [
+    { "file": "samples/madera/paso_a.wav", "label": "Paso A" },
+    { "file": "samples/madera/paso_b.wav", "label": "Paso B" },
+    { "file": "samples/madera/paso_c.wav", "label": "Paso C" }
+  ]
+}
+```
+
+El motor usa **round-robin automático**: cada vez que disparás esa superficie,
+rota entre los archivos declarados para evitar el efecto de "máquina de coser".
+
+Si un archivo no se encuentra (HTTP 404), la app cae automáticamente al
+sintetizador procedural WebAudio — así siempre funciona aunque falten WAVs.
 
 ---
 
 ## Deploy en GitHub Pages
 
-### Opción A — Repositorio nuevo
-
 ```bash
 git init
 git add .
-git commit -m "init: foley recorder"
+git commit -m "init: foley recorder v2"
 git remote add origin https://github.com/TU_USUARIO/foley-recorder.git
 git push -u origin main
 ```
 
-Luego en GitHub:  
-`Settings → Pages → Source: Deploy from branch → Branch: main / (root) → Save`
+En GitHub → Settings → Pages → Source: `main / (root)` → Save.
 
-La URL será: `https://TU_USUARIO.github.io/foley-recorder/`
+URL resultante: `https://TU_USUARIO.github.io/foley-recorder/`
 
-### Opción B — Carpeta dentro de un repo existente
+> **Nota CORS:** GitHub Pages sirve los archivos con los headers correctos.
+> Si usás otro servidor, asegurate de que los WAV se sirvan con
+> `Access-Control-Allow-Origin: *` para que el AudioContext pueda decodificarlos.
 
-Subí la carpeta como `docs/` o cualquier subdirectorio y configurá Pages desde esa carpeta.
+---
+
+## Features de edición en timeline
+
+- **Click** sobre un impulso → lo selecciona (aparece tooltip)
+- **Drag** horizontal → mueve el evento en el tiempo
+- Tooltip **⇄** → abre modal para cambiar la superficie
+- Tooltip **✕** (o `Delete`/`Backspace`) → elimina el evento
+- Click en área vacía → deselecciona / busca en el video
+- `Escape` → cierra tooltip y modal
+
+---
+
+## Round-robin
+
+El sistema mantiene un contador por categoría. Cada disparo avanza el contador,
+rotando entre todos los archivos declarados.
+
+El índice exacto usado en cada disparo se guarda en el evento, de modo que el
+render offline reproduce **exactamente** el mismo sample que sonó durante la grabación.
 
 ---
 
@@ -63,37 +122,16 @@ Subí la carpeta como `docs/` o cualquier subdirectorio y configurá Pages desde
 | Feature | Chrome | Firefox | Safari | Edge |
 |---|---|---|---|---|
 | Video drag & drop | ✅ | ✅ | ✅ | ✅ |
-| Web Audio API | ✅ | ✅ | ✅ | ✅ |
-| OfflineAudioContext | ✅ | ✅ | ✅ | ✅ |
-| Export WAV | ✅ | ✅ | ✅ | ✅ |
-
-> Safari requiere interacción de usuario antes de reproducir audio (ya contemplado).
-
----
-
-## Samples builtin
-
-| ID | Nombre | Tipo |
-|---|---|---|
-| w1 | Tablón seco | Madera |
-| w2 | Parquet viejo | Madera |
-| w3 | Escalera | Madera |
-| c1 | Interior liso | Cemento |
-| c2 | Exterior rugoso | Cemento |
-| g1 | Grava fina | Grava |
-| g2 | Cascajo | Grava |
-| m1 | Chapa | Metal |
-| m2 | Escalera metálica | Metal |
-
-Los samples builtin son síntesis procedural (WebAudio).  
-Para Foley real, cargá tus propios WAV con **+ Agregar WAV/MP3**.
+| Web Audio / OfflineAudioContext | ✅ | ✅ | ✅ | ✅ |
+| Export WAV 16-bit | ✅ | ✅ | ✅ | ✅ |
+| Touch / Mobile | ✅ | ✅ | ✅ | ✅ |
 
 ---
 
 ## Próximas features posibles
 
-- [ ] Control de ganancia individual por sample
-- [ ] Múltiples tracks / capas de Foley
-- [ ] Export del log de eventos como CSV (para importar en Reaper)
-- [ ] Waveform del audio del video superpuesta en la timeline
-- [ ] Modo "punch-in": sobrescribir una sección sin perder el resto
+- [ ] Ganancia individual por evento (knob en tooltip)
+- [ ] Export log de eventos como CSV para importar en Reaper
+- [ ] Múltiples tracks (Foley + efectos de sala + ambiente)
+- [ ] Waveform del audio original del video superpuesta
+- [ ] Modo punch-in: regrabar sólo un rango de tiempo
