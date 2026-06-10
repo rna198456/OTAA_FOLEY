@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Foley Recorder · Cátedra Corti</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ══ HEADER ══════════════════════════════════════════════════════════════ -->
+<header id="app-header">
+  <div class="header-left">
+    <div class="logo-box">👣</div>
+    <div class="header-titles">
+      <span class="app-name">FOLEY RECORDER</span>
+      <span class="app-sub">Oficios y Técnicas de las Artes Audiovisuales · Cátedra Corti</span>
+    </div>
+  </div>
+  <div class="header-right">
+    <div id="rec-indicator" class="rec-indicator hidden">
+      <span class="rec-dot"></span>REC
+    </div>
+    <div id="timecode" class="timecode">00:00.00</div>
+  </div>
+</header>
+
+<!-- ══ BODY ════════════════════════════════════════════════════════════════ -->
+<div id="app-body">
+
+  <!-- Left: video + waveform + transport -->
+  <div id="left-panel">
+
+    <!-- Video drop zone -->
+    <div id="video-zone" class="dropzone">
+      <video id="video-el" style="display:none"></video>
+      <div id="drop-hint">
+        <div class="drop-icon">🎬</div>
+        <div class="drop-label">Arrastrá un video aquí</div>
+        <label class="drop-link">
+          o seleccioná archivo
+          <input type="file" id="video-file-input" accept="video/*" style="display:none" />
+        </label>
+      </div>
+    </div>
+
+    <!-- Waveform + transport -->
+    <div id="transport-panel">
+      <canvas id="waveform" height="72"></canvas>
+      <div id="progress-bar-wrap"><div id="progress-bar-fill"></div></div>
+
+      <div id="controls-row">
+        <button id="btn-record" class="btn btn-amber" disabled>● GRABAR</button>
+        <button id="btn-stop"   class="btn btn-red"   disabled style="display:none">■ DETENER</button>
+        <button id="btn-export" class="btn btn-ghost"  disabled>↓ EXPORTAR WAV</button>
+        <span   id="export-status" class="export-status"></span>
+        <span   id="event-count"   class="event-count">0 eventos</span>
+      </div>
+
+      <div id="hint-bar" class="hint-bar hidden">
+        ESPACIO = <span id="hint-sample-name">—</span> · Click en cualquier sample para activar
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: sample library -->
+  <div id="right-panel">
+    <div id="library-header">
+      <span class="section-label">BIBLIOTECA</span>
+      <label class="link-btn">
+        + Agregar WAV/MP3
+        <input type="file" id="custom-sample-input" accept="audio/*" style="display:none" />
+      </label>
+    </div>
+
+    <div id="library-scroll">
+      <!-- Categories injected by JS -->
+    </div>
+
+    <div id="session-log-wrap">
+      <div class="section-label" style="padding:10px 16px 6px">SESIÓN ACTUAL</div>
+      <div id="session-log"></div>
+    </div>
+  </div>
+
+</div><!-- /app-body -->
+
+<script src="audio.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
