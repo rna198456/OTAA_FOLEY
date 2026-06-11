@@ -1,59 +1,67 @@
 /**
- * app.js — Foley Recorder v3
+ * app.js — Foley Recorder v4
  *
- * Nuevas features vs v2:
- *  - Timeline zoom: rueda del mouse, pinch (mobile), botones +/−/FIT
- *  - Scroll horizontal de timeline cuando hay zoom
- *  - Volumen por evento: drag vertical en impulso + slider en tooltip
- *  - Visualización de amplitude (altura del impulso proporcional al gain)
- *  - Fix mobile: library-col con overflow-y correcto
- *  - Render a 48 kHz
+ * Nuevas features:
+ *  - Biblioteca: selector de calzado (radio) + superficies (multi-select + fader por capa)
+ *  - Cada evento graba layers = [{ fwId, surface, rrIdx, gainMult }]
+ *  - Preview y Export arrancan desde el timecode seleccionado (no desde 0)
+ *  - Zoom: ancla siempre al inicio del área visible (no al centro)
+ *  - Scrollbar de timeline más grande y fácil de arrastrar
+ *  - Drag vertical en impulso = volumen del evento completo
  */
 'use strict';
 
 // ── State ─────────────────────────────────────────────────────────────────
 const S = {
-  library:        [],
-  userCats:       [],
-  selectedCat:    null,
-  // events: { id, catId, label, color, sampleFiles, rrIdx,
-  //           isUser, userId, time, gain }
-  events:         [],
+  lib: null,          // parsed library.json
+
+  // Selections
+  selectedFw:      null,    // { id, label, emoji }
+  activeSurfaces:  {},      // surfaceId → gainMult (0–2). Present = active
+
+  // Events recorded
+  events:         [],       // [{ id, time, gain, layers, label, color }]
+
+  // Video
   videoLoaded:    false,
   videoDuration:  0,
+
+  // Playback state
   isRecording:    false,
   isPreviewing:   false,
+  startTimecode:  0,        // where playback begins (video.currentTime at rec/preview start)
+
+  // Selected event (for editing)
   selectedEvId:   null,
 
-  // Timeline zoom & scroll
-  zoom:           1,       // 1× – 32×
-  scrollOffset:   0,       // seconds from left edge
+  // Timeline zoom
+  zoom:           1,
+  scrollOffset:   0,        // seconds from left
 
-  // Drag state
+  // Drag on canvas
   drag: null,
   // { evId, mode:'move'|'gain', startX, startY, startTime, startGain, moved }
 
-  // Pinch state
+  // Pinch
   pinch: null,
-  // { dist, zoom, scroll }
 
   previewTimers: [],
 };
 
-const ZOOM_MIN = 1, ZOOM_MAX = 32, ZOOM_STEP = 1.6;
-let evIdSeq = 0;
-const newEvId = () => 'ev_' + (++evIdSeq);
+const ZOOM_MIN = 1, ZOOM_MAX = 32, ZOOM_STEP = Math.sqrt(2);
+let evSeq = 0;
+const newId = () => 'ev_' + (++evSeq);
 
 // ── DOM ───────────────────────────────────────────────────────────────────
-const $  = id => document.getElementById(id);
+const $   = id => document.getElementById(id);
 const video         = $('video-el');
 const dropHint      = $('drop-hint');
 const videoZone     = $('video-zone');
 const wfCanvas      = $('waveform');
-const wfCtx         = wfCanvas.getContext('2d');
 const wfOuter       = $('waveform-outer');
-const progressFill  = $('progress-fill');
+const wfCtx         = wfCanvas.getContext('2d');
 const progressWrap  = $('progress-wrap');
+const progressFill  = $('progress-fill');
 const timecodeEl    = $('timecode');
 const recIndicator  = $('rec-indicator');
 const playIndicator = $('play-indicator');
@@ -65,76 +73,55 @@ const exportStatus  = $('export-status');
 const eventCount    = $('event-count');
 const hintBar       = $('hint-bar');
 const hintName      = $('hint-name');
-const hintRr        = $('hint-rr');
-const libraryGrid   = $('library-grid');
-const libraryLoading= $('library-loading');
+const fwGrid        = $('fw-grid');
+const surfaceList   = $('surface-list');
+const btnTrigger    = $('btn-trigger');
+const triggerLabel  = $('trigger-label');
+const triggerIcon   = $('trigger-icon');
 const sessionLog    = $('session-log');
 const tooltip       = $('event-tooltip');
 const tooltipName   = $('tooltip-name');
-const tooltipChange = $('tooltip-change');
-const tooltipDelete = $('tooltip-delete');
 const tooltipVol    = $('tooltip-vol');
 const tooltipVolLbl = $('tooltip-vol-label');
+const tooltipChange = $('tooltip-change');
+const tooltipDelete = $('tooltip-delete');
 const modalOverlay  = $('modal-overlay');
-const modalGrid     = $('modal-grid');
+const modalContent  = $('modal-content');
 const modalCancel   = $('modal-cancel');
 const btnZoomIn     = $('btn-zoom-in');
 const btnZoomOut    = $('btn-zoom-out');
 const btnZoomFit    = $('btn-zoom-fit');
 const zoomLabel     = $('zoom-label');
-const scrollThumb   = $('tl-scrollbar-thumb');
-const scrollWrap    = $('tl-scrollbar-wrap');
+const scrollTrack   = $('tl-scroll-track');
+const scrollThumb   = $('tl-scroll-thumb');
 
-// ── Utils ─────────────────────────────────────────────────────────────────
-const fmtTime = t => {
+// ── Formatting ────────────────────────────────────────────────────────────
+const fmt = t => {
   const m = Math.floor(t / 60).toString().padStart(2, '0');
   const s = (t % 60).toFixed(2).padStart(5, '0');
   return `${m}:${s}`;
 };
 
-const CSS_COLORS = {
-  '#8B5E3C':'#8B5E3C', '#A0724A':'#A0724A',
-  '#6B6B6B':'#6B6B6B', '#9B8B6A':'#9B8B6A',
-  '#5A8A9F':'#5A8A9F', '#9B6FD4':'#9B6FD4',
-};
-const resolveColor = c => c || '#D4870A';
+// ── Zoom & scroll ─────────────────────────────────────────────────────────
+function visDur() { return (S.videoDuration || 10) / S.zoom; }
 
-// ── Zoom helpers ──────────────────────────────────────────────────────────
-
-/** Visible duration in seconds given current zoom */
-function visibleDur() {
-  return (S.videoDuration || 10) / S.zoom;
-}
-
-/** Clamp scrollOffset so we never scroll past the end */
 function clampScroll() {
-  const maxOff = Math.max(0, (S.videoDuration || 0) - visibleDur());
-  S.scrollOffset = Math.max(0, Math.min(S.scrollOffset, maxOff));
+  const max = Math.max(0, (S.videoDuration || 0) - visDur());
+  S.scrollOffset = Math.max(0, Math.min(S.scrollOffset, max));
 }
 
-/** Convert canvas pixel X → video time (accounting for zoom & scroll) */
 function xToTime(x) {
-  const W = wfCanvas.offsetWidth || 1;
-  return S.scrollOffset + (x / W) * visibleDur();
+  return S.scrollOffset + (x / (wfCanvas.offsetWidth || 1)) * visDur();
 }
-
-/** Convert video time → canvas pixel X */
 function timeToX(t) {
-  const W = wfCanvas.offsetWidth || 1;
-  return ((t - S.scrollOffset) / visibleDur()) * W;
+  return ((t - S.scrollOffset) / visDur()) * (wfCanvas.offsetWidth || 1);
 }
 
-function setZoom(z, anchorTime) {
-  // anchorTime: keep this time at the same pixel after zoom
-  const prevVis = visibleDur();
+// zoom anchors to left edge of visible area (not center)
+function setZoom(z) {
+  const anchorTime = S.scrollOffset;   // keep left edge fixed
   S.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
-  const newVis = visibleDur();
-
-  if (anchorTime !== undefined) {
-    // Adjust scroll so anchorTime stays at same relative position
-    const ratio = (anchorTime - S.scrollOffset) / prevVis;
-    S.scrollOffset = anchorTime - ratio * newVis;
-  }
+  S.scrollOffset = anchorTime;
   clampScroll();
   updateZoomUI();
   drawWaveform();
@@ -143,161 +130,234 @@ function setZoom(z, anchorTime) {
 
 function updateZoomUI() {
   const z = S.zoom;
-  zoomLabel.textContent = z < 2 ? '1×' : z < 4 ? '2×' : z < 8 ? '4×' :
-                          z < 16 ? '8×' : z < 24 ? '16×' : '32×';
+  zoomLabel.textContent =
+    z <= 1 ? '1×' : z <= 2 ? '2×' : z <= 4 ? '4×' :
+    z <= 8 ? '8×' : z <= 16 ? '16×' : '32×';
   btnZoomOut.disabled = S.zoom <= ZOOM_MIN;
   btnZoomIn.disabled  = S.zoom >= ZOOM_MAX;
 }
 
 function updateScrollbar() {
   const dur = S.videoDuration || 1;
-  const vis = visibleDur();
-  if (S.zoom <= 1) {
-    scrollThumb.style.display = 'none';
-    return;
-  }
+  const vis = visDur();
+  if (S.zoom <= 1) { scrollThumb.style.display = 'none'; return; }
   scrollThumb.style.display = 'block';
-  const ww = scrollWrap.offsetWidth;
-  const tw = Math.max(20, (vis / dur) * ww);
-  const tx = (S.scrollOffset / dur) * ww;
-  scrollThumb.style.width = tw + 'px';
-  scrollThumb.style.left  = Math.min(tx, ww - tw) + 'px';
+  const tw = scrollTrack.offsetWidth;
+  const w  = Math.max(28, (vis / dur) * tw);
+  const x  = Math.min((S.scrollOffset / dur) * tw, tw - w);
+  scrollThumb.style.width = w + 'px';
+  scrollThumb.style.left  = x + 'px';
 }
 
-// ── Zoom buttons ──────────────────────────────────────────────────────────
-btnZoomIn.addEventListener('click', () => {
-  const mid = S.scrollOffset + visibleDur() / 2;
-  setZoom(S.zoom * ZOOM_STEP, mid);
-});
-btnZoomOut.addEventListener('click', () => {
-  const mid = S.scrollOffset + visibleDur() / 2;
-  setZoom(S.zoom / ZOOM_STEP, mid);
-});
-btnZoomFit.addEventListener('click', () => {
-  S.zoom = 1; S.scrollOffset = 0;
-  updateZoomUI(); drawWaveform(); updateScrollbar();
-});
+// Zoom buttons
+btnZoomIn.addEventListener('click',  () => setZoom(S.zoom * ZOOM_STEP));
+btnZoomOut.addEventListener('click', () => setZoom(S.zoom / ZOOM_STEP));
+btnZoomFit.addEventListener('click', () => { S.zoom = 1; S.scrollOffset = 0; updateZoomUI(); drawWaveform(); updateScrollbar(); });
 
-// ── Wheel zoom ────────────────────────────────────────────────────────────
+// Wheel zoom — anchor to cursor position
 wfOuter.addEventListener('wheel', e => {
   e.preventDefault();
-  const rect      = wfCanvas.getBoundingClientRect();
-  const px        = e.clientX - rect.left;
-  const anchorT   = xToTime(px);
-  const factor    = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
-  setZoom(S.zoom * factor, anchorT);
+  const rect = wfCanvas.getBoundingClientRect();
+  const anchorT = xToTime(e.clientX - rect.left);
+  const prev = S.zoom;
+  S.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, S.zoom * (e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP)));
+  // Keep anchor time at same pixel
+  const ratio = (anchorT - S.scrollOffset) / (S.videoDuration / prev || 1);
+  S.scrollOffset = anchorT - ratio * visDur();
+  clampScroll();
+  updateZoomUI(); drawWaveform(); updateScrollbar();
 }, { passive: false });
 
-// ── Scrollbar drag ────────────────────────────────────────────────────────
+// Scrollbar drag
 let _sbDrag = null;
 scrollThumb.addEventListener('mousedown', e => {
   e.preventDefault();
   _sbDrag = { startX: e.clientX, startOff: S.scrollOffset };
 });
+scrollThumb.addEventListener('touchstart', e => {
+  e.preventDefault();
+  _sbDrag = { startX: e.touches[0].clientX, startOff: S.scrollOffset };
+}, { passive: false });
 document.addEventListener('mousemove', e => {
   if (!_sbDrag) return;
-  const dx  = e.clientX - _sbDrag.startX;
-  const ww  = scrollWrap.offsetWidth;
-  const dt  = (dx / ww) * (S.videoDuration || 1);
-  S.scrollOffset = _sbDrag.startOff + dt;
-  clampScroll();
-  drawWaveform();
-  updateScrollbar();
+  const dx = e.clientX - _sbDrag.startX;
+  S.scrollOffset = _sbDrag.startOff + (dx / scrollTrack.offsetWidth) * (S.videoDuration || 1);
+  clampScroll(); drawWaveform(); updateScrollbar();
 });
-document.addEventListener('mouseup', () => { _sbDrag = null; });
+document.addEventListener('touchmove', e => {
+  if (!_sbDrag) return;
+  const dx = e.touches[0].clientX - _sbDrag.startX;
+  S.scrollOffset = _sbDrag.startOff + (dx / scrollTrack.offsetWidth) * (S.videoDuration || 1);
+  clampScroll(); drawWaveform(); updateScrollbar();
+}, { passive: false });
+document.addEventListener('mouseup',  () => { _sbDrag = null; });
+document.addEventListener('touchend', () => { _sbDrag = null; });
 
-// ── Library ───────────────────────────────────────────────────────────────
+// ── Library init ──────────────────────────────────────────────────────────
 async function loadLibrary() {
   try {
     const res = await fetch('library.json');
-    if (!res.ok) throw new Error('404');
-    const data = await res.json();
-    S.library = data.categories || [];
+    S.lib = await res.json();
   } catch {
-    S.library = [];
+    // Fallback built-in
+    S.lib = {
+      footwear: [
+        { id:'bota',      label:'Bota',      emoji:'👢' },
+        { id:'zapatilla', label:'Zapatilla', emoji:'👟' },
+        { id:'taco',      label:'Taco',      emoji:'👠' },
+        { id:'descalzo',  label:'Descalzo',  emoji:'🦶' },
+      ],
+      surfaces: [
+        { id:'limpia',  label:'Limpia',  emoji:'🏛️', color:'#6B8C6B', samples:[] },
+        { id:'arenosa', label:'Arenosa', emoji:'🏖️', color:'#9B8B6A', samples:[] },
+        { id:'humeda',  label:'Húmeda',  emoji:'💧', color:'#5A8A9F', samples:[] },
+        { id:'agua',    label:'Agua',    emoji:'🌊', color:'#3A7AB0', samples:[] },
+      ],
+    };
   }
-  renderLibrary();
-  libraryLoading.classList.add('hidden');
-  S.library.forEach(cat => AudioEngine.preloadCategory(cat));
+  renderFootwear();
+  renderSurfaces();
+  $('library-loading') && $('library-loading').classList.add('hidden');
 }
 
-function renderLibrary() {
-  libraryGrid.innerHTML = '';
-  const SYNTH_CATS = [
-    { id:'madera',  label:'Madera',  emoji:'🪵', color:'#8B5E3C', samples:[] },
-    { id:'cemento', label:'Cemento', emoji:'🏗️', color:'#6B6B6B', samples:[] },
-    { id:'grava',   label:'Grava',   emoji:'🪨', color:'#9B8B6A', samples:[] },
-    { id:'metal',   label:'Metal',   emoji:'⚙️', color:'#5A8A9F', samples:[] },
-  ];
-  const display = [...(S.library.length ? S.library : SYNTH_CATS), ...S.userCats];
-  display.forEach(cat => libraryGrid.appendChild(makeCatCard(cat)));
-}
-
-function makeCatCard(cat) {
-  const isSel  = S.selectedCat && S.selectedCat.id === cat.id;
-  const total  = cat.samples ? cat.samples.length : 0;
-  const nextLbl = total > 1
-    ? cat.samples[AudioEngine.getRrIdx(cat.id, total) % total].label
-    : total === 1 ? cat.samples[0].label : '(síntesis)';
-
-  const card    = document.createElement('div');
-  card.className = 'cat-card';
-  card.dataset.catId = cat.id;
-
-  const hdr = document.createElement('div');
-  hdr.className = 'cat-card-header';
-  hdr.innerHTML = `
-    <span class="cat-dot" style="background:${cat.color}"></span>
-    <span class="cat-label-text">${cat.emoji} ${cat.label}</span>
-    ${total > 1 ? `<span class="cat-rr-badge">${total} vars</span>` : ''}
-    ${isSel ? `<span class="cat-selected-badge" style="background:${cat.color}"></span>` : ''}`;
-
-  const trigger = document.createElement('button');
-  trigger.className = 'cat-trigger' + (isSel ? ' selected' : '');
-  trigger.dataset.catId = cat.id;
-  trigger.innerHTML = `
-    <span style="font-size:18px">${cat.emoji}</span>
-    <span style="flex:1">${cat.label}</span>
-    <span class="cat-rr-next">${nextLbl}</span>`;
-
-  trigger.addEventListener('click', () => triggerCategory(cat));
-  trigger.addEventListener('touchstart', e => { e.preventDefault(); triggerCategory(cat); }, { passive: false });
-
-  card.appendChild(hdr);
-  card.appendChild(trigger);
-  return card;
-}
-
-function refreshLibraryUI() {
-  document.querySelectorAll('.cat-trigger').forEach(btn => {
-    btn.classList.toggle('selected', S.selectedCat && btn.dataset.catId === S.selectedCat.id);
+// ── Footwear selector ─────────────────────────────────────────────────────
+function renderFootwear() {
+  fwGrid.innerHTML = '';
+  S.lib.footwear.forEach(fw => {
+    const btn = document.createElement('button');
+    btn.className = 'fw-btn';
+    btn.dataset.fwId = fw.id;
+    btn.innerHTML = `<span class="fw-emoji">${fw.emoji}</span><span class="fw-label">${fw.label}</span>`;
+    btn.addEventListener('click', () => selectFootwear(fw));
+    btn.addEventListener('touchstart', e => { e.preventDefault(); selectFootwear(fw); }, { passive: false });
+    fwGrid.appendChild(btn);
   });
 }
 
-function flashCatCard(catId) {
-  const btn = libraryGrid.querySelector(`.cat-trigger[data-cat-id="${catId}"]`);
-  if (!btn) return;
-  btn.classList.add('flash');
-  setTimeout(() => btn.classList.remove('flash'), 110);
+function selectFootwear(fw) {
+  S.selectedFw = fw;
+  document.querySelectorAll('.fw-btn').forEach(b =>
+    b.classList.toggle('selected', b.dataset.fwId === fw.id));
+  // Preload all surfaces for this footwear
+  if (S.lib.surfaces) {
+    S.lib.surfaces.forEach(surf => AudioEngine.preloadSurface(fw.id, surf));
+  }
+  updateTrigger();
+}
+
+// ── Surface selector + faders ─────────────────────────────────────────────
+function renderSurfaces() {
+  surfaceList.innerHTML = '';
+  (S.lib.surfaces || []).forEach(surf => {
+    const row = document.createElement('div');
+    row.className = 'surface-row';
+    row.dataset.surfId = surf.id;
+
+    const checkbox = document.createElement('button');
+    checkbox.className = 'surf-check';
+    checkbox.dataset.surfId = surf.id;
+    checkbox.innerHTML = `<span class="surf-emoji">${surf.emoji}</span><span class="surf-name">${surf.label}</span>`;
+    checkbox.addEventListener('click', () => toggleSurface(surf));
+    checkbox.addEventListener('touchstart', e => { e.preventDefault(); toggleSurface(surf); }, { passive: false });
+
+    const faderWrap = document.createElement('div');
+    faderWrap.className = 'surf-fader-wrap hidden';
+    faderWrap.dataset.surfId = surf.id;
+    faderWrap.innerHTML = `
+      <input type="range" class="surf-fader" min="0" max="200" step="1" value="100"
+             data-surf-id="${surf.id}" />
+      <span class="surf-fader-val">100%</span>`;
+    faderWrap.querySelector('.surf-fader').addEventListener('input', e => {
+      const val = parseInt(e.target.value);
+      S.activeSurfaces[surf.id] = val / 100;
+      faderWrap.querySelector('.surf-fader-val').textContent = val + '%';
+    });
+
+    row.appendChild(checkbox);
+    row.appendChild(faderWrap);
+    surfaceList.appendChild(row);
+  });
+}
+
+function toggleSurface(surf) {
+  if (S.activeSurfaces[surf.id] !== undefined) {
+    delete S.activeSurfaces[surf.id];
+  } else {
+    S.activeSurfaces[surf.id] = 1.0;
+  }
+  // Update UI
+  document.querySelectorAll('.surf-check').forEach(b => {
+    if (b.dataset.surfId === surf.id) {
+      b.classList.toggle('selected', S.activeSurfaces[surf.id] !== undefined);
+      b.style.borderColor = S.activeSurfaces[surf.id] !== undefined
+        ? (S.lib.surfaces.find(s => s.id === surf.id)?.color || '#D4870A')
+        : '';
+    }
+  });
+  const faderWrap = surfaceList.querySelector(`.surf-fader-wrap[data-surf-id="${surf.id}"]`);
+  if (faderWrap) {
+    faderWrap.classList.toggle('hidden', S.activeSurfaces[surf.id] === undefined);
+  }
+  updateTrigger();
+}
+
+function buildLayers() {
+  if (!S.selectedFw || !Object.keys(S.activeSurfaces).length) return [];
+  return Object.entries(S.activeSurfaces).map(([surfId, gainMult]) => {
+    const surface = S.lib.surfaces.find(s => s.id === surfId);
+    return { fwId: S.selectedFw.id, surface, gainMult };
+  });
+}
+
+function updateTrigger() {
+  const layers = buildLayers();
+  const ok = layers.length > 0;
+  btnTrigger.disabled = !ok;
+  if (!ok) {
+    triggerLabel.textContent = S.selectedFw
+      ? 'Seleccioná al menos una superficie'
+      : 'Seleccioná calzado y superficie';
+    triggerIcon.textContent = S.selectedFw ? S.selectedFw.emoji : '👣';
+  } else {
+    triggerIcon.textContent = S.selectedFw.emoji;
+    const surfNames = layers.map(l => l.surface.label).join(' + ');
+    triggerLabel.textContent = `${S.selectedFw.label} · ${surfNames}`;
+  }
+  updateHint();
 }
 
 // ── Trigger ───────────────────────────────────────────────────────────────
-function triggerCategory(cat) {
-  AudioEngine.getCtx();
-  const { rrIdx } = AudioEngine.playSample(cat.id, cat.samples || [], cat.isUser || false, cat.userId || null, 1);
-  flashCatCard(cat.id);
-  S.selectedCat = cat;
-  refreshLibraryUI();
-  updateHint();
+btnTrigger.addEventListener('click',      fireTrigger);
+btnTrigger.addEventListener('touchstart', e => { e.preventDefault(); fireTrigger(); }, { passive: false });
 
+function fireTrigger() {
+  const layers = buildLayers();
+  if (!layers.length) return;
+  AudioEngine.getCtx();
+
+  // Play real-time
+  const results = AudioEngine.playLayers(layers);
+
+  // Flash trigger button
+  btnTrigger.classList.add('flash');
+  setTimeout(() => btnTrigger.classList.remove('flash'), 100);
+
+  // Record event
   if (S.isRecording && video) {
+    const rrLayers = layers.map((l, i) => ({
+      fwId:     l.fwId,
+      surface:  l.surface,
+      gainMult: l.gainMult,
+      rrIdx:    results[i]?.rrIdx || 0,
+    }));
+    const surfColors = layers.map(l => l.surface.color);
     const ev = {
-      id: newEvId(),
-      catId: cat.id, label: cat.label, color: cat.color,
-      sampleFiles: cat.samples || [],
-      rrIdx, isUser: cat.isUser || false, userId: cat.userId || null,
-      time: video.currentTime,
-      gain: 1.0,
+      id:     newId(),
+      time:   video.currentTime,
+      gain:   1.0,
+      layers: rrLayers,
+      label:  `${S.selectedFw.emoji} ${S.selectedFw.label} · ${layers.map(l => l.surface.label).join('+')}`,
+      color:  surfColors[0] || '#D4870A',
     };
     S.events.push(ev);
     updateEventCount();
@@ -306,48 +366,52 @@ function triggerCategory(cat) {
   }
 }
 
-// ── Video ─────────────────────────────────────────────────────────────────
+// Keyboard: space = fire
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && S.isRecording && !btnTrigger.disabled) {
+    e.preventDefault(); fireTrigger();
+  }
+  if (e.code === 'Escape') { hideTooltip(); closeModal(); }
+  if ((e.code === 'Delete' || e.code === 'Backspace') && S.selectedEvId && !S.isRecording) {
+    e.preventDefault(); deleteEvent(S.selectedEvId);
+  }
+});
+
+// ── Video load ────────────────────────────────────────────────────────────
 function loadVideo(file) {
   if (!file || !file.type.startsWith('video/')) return;
   video.src = URL.createObjectURL(file);
   video.style.display = 'block';
   dropHint.style.display = 'none';
   video.onloadedmetadata = () => {
-    S.videoLoaded  = true;
-    S.videoDuration = video.duration;
-    S.events = [];
-    S.zoom = 1; S.scrollOffset = 0;
+    S.videoLoaded = true; S.videoDuration = video.duration;
+    S.events = []; S.zoom = 1; S.scrollOffset = 0;
     btnRecord.disabled = false;
-    btnPreview.disabled = true;
-    btnExport.disabled  = true;
-    updateEventCount();
-    updateZoomUI();
-    drawWaveform();
-    updateScrollbar();
-    hideTooltip();
+    btnPreview.disabled = true; btnExport.disabled = true;
+    updateEventCount(); updateZoomUI(); drawWaveform(); updateScrollbar(); hideTooltip();
   };
   video.onended = () => {
     if (S.isRecording)  stopRecording();
     if (S.isPreviewing) stopPreview();
   };
 }
-
 $('video-file-input').addEventListener('change',   e => loadVideo(e.target.files[0]));
 $('video-file-input-2').addEventListener('change', e => loadVideo(e.target.files[0]));
 videoZone.addEventListener('dragover',  e => { e.preventDefault(); videoZone.classList.add('drag-over'); });
 videoZone.addEventListener('dragleave', ()  => videoZone.classList.remove('drag-over'));
 videoZone.addEventListener('drop',      e  => { e.preventDefault(); loadVideo(e.dataTransfer.files[0]); });
 
+// Click on drop zone when no video
+videoZone.addEventListener('click', e => {
+  if (!S.videoLoaded && e.target === videoZone) $('video-file-input').click();
+});
+
 // ── Custom samples ────────────────────────────────────────────────────────
 $('custom-sample-input').addEventListener('change', async e => {
+  // Custom samples are added as standalone layers (user category)
   for (const file of e.target.files) {
-    try {
-      const { id, name } = await AudioEngine.loadUserSample(file);
-      S.userCats.push({ id, label: name, emoji: '🎵', color: '#9B6FD4',
-        samples: [{ file: null, label: name }], isUser: true, userId: id });
-    } catch (err) { console.error(err); }
+    try { await AudioEngine.loadUserSample(file); } catch {}
   }
-  renderLibrary();
   e.target.value = '';
 });
 
@@ -358,8 +422,9 @@ btnStop.addEventListener('click',   stopRecording);
 function startRecording() {
   if (!S.videoLoaded) return;
   AudioEngine.getCtx();
+  // Start from current timecode position (wherever the user seeked to)
+  S.startTimecode = video.currentTime;
   S.events = []; S.isRecording = true;
-  video.currentTime = 0;
   video.play();
   btnRecord.style.display = 'none';
   btnStop.style.display   = 'inline-block'; btnStop.disabled = false;
@@ -370,8 +435,7 @@ function startRecording() {
 
 function stopRecording() {
   if (!S.isRecording) return;
-  S.isRecording = false;
-  video.pause();
+  S.isRecording = false; video.pause();
   btnStop.style.display   = 'none';
   btnRecord.style.display = 'inline-block'; btnRecord.disabled = false;
   recIndicator.classList.add('hidden');
@@ -380,28 +444,28 @@ function stopRecording() {
   btnExport.disabled  = S.events.length === 0;
 }
 
-// ── Preview ───────────────────────────────────────────────────────────────
-btnPreview.addEventListener('click', () => { S.isPreviewing ? stopPreview() : startPreview(); });
+// ── Preview — starts from current video timecode ──────────────────────────
+btnPreview.addEventListener('click', () => S.isPreviewing ? stopPreview() : startPreview());
 
 async function startPreview() {
   if (!S.events.length || !S.videoLoaded) return;
   S.isPreviewing = true;
-  S.previewTimers.forEach(clearTimeout);
-  S.previewTimers = [];
+  S.previewTimers.forEach(clearTimeout); S.previewTimers = [];
 
-  const ctx   = AudioEngine.getCtx();
-  const now   = ctx.currentTime;
-  const delay = 0.05;
+  // Start from the current position of the video (wherever user seeked)
+  const startAt  = video.currentTime;
+  S.startTimecode = startAt;
+  const ctx      = AudioEngine.getCtx();
 
-  S.events.forEach(ev => {
-    const ms = Math.max(0, ev.time - video.currentTime) * 1000 + delay * 1000;
-    const t  = S.previewTimers.push(setTimeout(() => {
+  // Schedule only events that are at or after startAt
+  S.events.filter(ev => ev.time >= startAt).forEach(ev => {
+    const delayMs = (ev.time - startAt) * 1000;
+    S.previewTimers.push(setTimeout(() => {
       if (!S.isPreviewing) return;
-      AudioEngine.scheduleEvent(ev, ctx.currentTime);
-    }, ms));
+      AudioEngine.scheduleLayers(ev.layers, ctx.currentTime + 0.02);
+    }, delayMs));
   });
 
-  video.currentTime = 0;
   await video.play();
   btnPreview.textContent = '■ DETENER';
   playIndicator.classList.remove('hidden');
@@ -410,20 +474,16 @@ async function startPreview() {
 
 function stopPreview() {
   S.isPreviewing = false;
-  S.previewTimers.forEach(clearTimeout);
-  S.previewTimers = [];
+  S.previewTimers.forEach(clearTimeout); S.previewTimers = [];
   video.pause();
   btnPreview.textContent = '▶ ESCUCHAR';
   playIndicator.classList.add('hidden');
 }
 
-video.addEventListener('ended', () => { if (S.isPreviewing) stopPreview(); });
-
-// ── Export ────────────────────────────────────────────────────────────────
+// ── Export — 48 kHz, all events regardless of timecode ───────────────────
 btnExport.addEventListener('click', async () => {
   if (!S.events.length) return;
-  btnExport.disabled = true;
-  setStatus('Renderizando 48 kHz…');
+  btnExport.disabled = true; setStatus('Renderizando 48 kHz…');
   try {
     const blob = await AudioEngine.renderToWav(S.events, S.videoDuration, 48000);
     const url  = URL.createObjectURL(blob);
@@ -434,11 +494,8 @@ btnExport.addEventListener('click', async () => {
     a.href = url; a.download = `foley_${base}_48k_${Date.now()}.wav`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
     setStatus('✓ WAV 48 kHz descargado', 4000);
-  } catch (err) {
-    setStatus('Error: ' + err.message, 4000);
-  } finally {
-    btnExport.disabled = false;
-  }
+  } catch (err) { setStatus('Error: ' + err.message, 4000); }
+  finally { btnExport.disabled = false; }
 });
 
 function setStatus(msg, clr = 0) {
@@ -446,41 +503,7 @@ function setStatus(msg, clr = 0) {
   if (clr) setTimeout(() => exportStatus.textContent = '', clr);
 }
 
-// ── RAF ───────────────────────────────────────────────────────────────────
-let _rafId = null;
-function startRaf() {
-  cancelAnimationFrame(_rafId);
-  function tick() {
-    const t = video.currentTime, d = S.videoDuration || 1;
-    timecodeEl.textContent   = fmtTime(t);
-    progressFill.style.width = `${(t / d) * 100}%`;
-
-    // Auto-scroll timeline during rec/preview to follow playhead
-    if (S.isRecording || S.isPreviewing) {
-      if (S.zoom > 1) {
-        const vis = visibleDur();
-        // Scroll when playhead reaches 80% of visible area
-        if (t > S.scrollOffset + vis * 0.8) {
-          S.scrollOffset = t - vis * 0.2;
-          clampScroll();
-          updateScrollbar();
-        }
-      }
-      drawWaveform();
-    }
-    _rafId = requestAnimationFrame(tick);
-  }
-  _rafId = requestAnimationFrame(tick);
-}
-
-video.addEventListener('timeupdate', () => {
-  if (!S.isRecording && !S.isPreviewing) {
-    timecodeEl.textContent   = fmtTime(video.currentTime);
-    progressFill.style.width = `${(video.currentTime / (S.videoDuration || 1)) * 100}%`;
-  }
-});
-
-// Progress bar seek
+// ── Progress bar / seek ───────────────────────────────────────────────────
 progressWrap.addEventListener('click', e => {
   if (S.isRecording) return;
   const r = (e.clientX - progressWrap.getBoundingClientRect().left) / progressWrap.offsetWidth;
@@ -488,103 +511,105 @@ progressWrap.addEventListener('click', e => {
   drawWaveform();
 });
 
-// ── Keyboard ──────────────────────────────────────────────────────────────
-document.addEventListener('keydown', e => {
-  if (e.code === 'Space' && S.selectedCat && S.isRecording) {
-    e.preventDefault(); triggerCategory(S.selectedCat);
-  }
-  if (e.code === 'Escape') { hideTooltip(); closeModal(); }
-  if ((e.code === 'Delete' || e.code === 'Backspace') && S.selectedEvId && !S.isRecording) {
-    e.preventDefault(); deleteEvent(S.selectedEvId);
+// ── RAF loop ──────────────────────────────────────────────────────────────
+let _rafId = null;
+function startRaf() {
+  cancelAnimationFrame(_rafId);
+  (function tick() {
+    const t = video.currentTime, d = S.videoDuration || 1;
+    timecodeEl.textContent   = fmt(t);
+    progressFill.style.width = `${(t / d) * 100}%`;
+    if (S.isRecording || S.isPreviewing) {
+      // Auto-scroll to follow playhead
+      if (S.zoom > 1) {
+        const vis = visDur();
+        if (t > S.scrollOffset + vis * 0.82) {
+          S.scrollOffset = t - vis * 0.15;
+          clampScroll(); updateScrollbar();
+        }
+      }
+      drawWaveform();
+    }
+    _rafId = requestAnimationFrame(tick);
+  })();
+}
+
+video.addEventListener('timeupdate', () => {
+  if (!S.isRecording && !S.isPreviewing) {
+    timecodeEl.textContent   = fmt(video.currentTime);
+    progressFill.style.width = `${(video.currentTime / (S.videoDuration || 1)) * 100}%`;
   }
 });
 
-// ── Waveform draw ─────────────────────────────────────────────────────────
+// ── Waveform ──────────────────────────────────────────────────────────────
 function drawWaveform() {
-  const W = wfOuter.clientWidth  || wfOuter.offsetWidth  || 400;
-  const H = wfCanvas.offsetHeight || 88;
+  const W = wfOuter.clientWidth || 400;
+  const H = 88;
   if (wfCanvas.width !== W)  wfCanvas.width  = W;
   if (wfCanvas.height !== H) wfCanvas.height = H;
 
   wfCtx.clearRect(0, 0, W, H);
-  wfCtx.fillStyle = '#0D0D0F';
-  wfCtx.fillRect(0, 0, W, H);
+  wfCtx.fillStyle = '#0D0D0F'; wfCtx.fillRect(0, 0, W, H);
 
-  const vis = visibleDur();
-  const dur = S.videoDuration || 1;
+  const vis   = visDur();
+  const MID   = H / 2;
+  const MAXAMP= MID * 0.86;
 
-  // Grid — number of lines proportional to zoom
-  const gridLines = Math.max(4, Math.min(20, Math.floor(S.zoom * 5)));
+  // Grid
+  const gridN = Math.max(4, Math.min(24, Math.round(S.zoom * 5)));
   wfCtx.strokeStyle = '#1E1E22'; wfCtx.lineWidth = 1;
-  for (let i = 1; i < gridLines; i++) {
-    const x = (i / gridLines) * W;
+  for (let i = 1; i < gridN; i++) {
+    const x = (i / gridN) * W;
     wfCtx.beginPath(); wfCtx.moveTo(x, 0); wfCtx.lineTo(x, H); wfCtx.stroke();
   }
-  wfCtx.beginPath(); wfCtx.moveTo(0, H / 2); wfCtx.lineTo(W, H / 2); wfCtx.stroke();
+  wfCtx.beginPath(); wfCtx.moveTo(0, MID); wfCtx.lineTo(W, MID); wfCtx.stroke();
 
-  // Time ruler labels
-  wfCtx.fillStyle = '#3A3A3E';
-  wfCtx.font = '9px IBM Plex Mono, monospace';
-  wfCtx.textAlign = 'left';
-  const step = vis / gridLines;
-  for (let i = 0; i <= gridLines; i++) {
+  // Time ruler
+  wfCtx.fillStyle = '#3A3A3E'; wfCtx.font = '8px IBM Plex Mono,monospace'; wfCtx.textAlign = 'left';
+  const step = vis / gridN;
+  for (let i = 0; i <= gridN; i++) {
     const t = S.scrollOffset + i * step;
-    if (t > dur + 0.01) break;
-    const x = (i / gridLines) * W;
-    wfCtx.fillText(fmtTime(t), x + 2, H - 3);
+    if (t > (S.videoDuration || 0) + 0.02) break;
+    wfCtx.fillText(fmt(t), (i / gridN) * W + 2, H - 3);
   }
 
   // Events
-  const MID = H / 2;
-  const MAX_AMP = MID * 0.88; // max impulse height at gain=2
-
   S.events.forEach(ev => {
-    const x = timeToX(ev.time);
-    if (x < -10 || x > W + 10) return; // outside visible range
-
-    const gain  = ev.gain !== undefined ? ev.gain : 1;
-    const amp   = Math.max(4, MAX_AMP * (gain / 2));  // gain 0→0, 1→half, 2→full
-    const col   = resolveColor(ev.color);
-    const isSel = ev.id === S.selectedEvId;
+    const x   = timeToX(ev.time);
+    if (x < -12 || x > W + 12) return;
+    const gain = ev.gain ?? 1;
+    const amp  = Math.max(5, MAXAMP * Math.min(gain, 2) / 2);
+    const col  = ev.color || '#D4870A';
+    const isSel= ev.id === S.selectedEvId;
 
     wfCtx.globalAlpha = isSel ? 1 : 0.82;
-    wfCtx.strokeStyle = col;
-    wfCtx.lineWidth   = isSel ? 3 : 2;
-
-    // Impulse lines
+    wfCtx.strokeStyle = col; wfCtx.lineWidth = isSel ? 3 : 2;
     wfCtx.beginPath(); wfCtx.moveTo(x, MID); wfCtx.lineTo(x, MID - amp); wfCtx.stroke();
     wfCtx.beginPath(); wfCtx.moveTo(x, MID); wfCtx.lineTo(x, MID + amp); wfCtx.stroke();
-
-    // Peak dot
     wfCtx.fillStyle = col;
     wfCtx.beginPath(); wfCtx.arc(x, MID - amp, isSel ? 5 : 3.5, 0, Math.PI * 2); wfCtx.fill();
 
-    // Gain label on selected
     if (isSel) {
-      wfCtx.strokeStyle = 'rgba(255,255,255,0.3)';
-      wfCtx.lineWidth = 1;
-      wfCtx.beginPath(); wfCtx.arc(x, MID - amp, 8, 0, Math.PI * 2); wfCtx.stroke();
-      wfCtx.fillStyle = '#E8E4DC';
-      wfCtx.font = 'bold 9px IBM Plex Mono, monospace';
+      wfCtx.strokeStyle = 'rgba(255,255,255,.25)'; wfCtx.lineWidth = 1;
+      wfCtx.beginPath(); wfCtx.arc(x, MID - amp, 9, 0, Math.PI * 2); wfCtx.stroke();
+      wfCtx.fillStyle = '#E8E4DC'; wfCtx.font = 'bold 8px IBM Plex Mono,monospace';
       wfCtx.textAlign = 'center';
-      wfCtx.fillText(Math.round(gain * 100) + '%', x, MID - amp - 12);
+      wfCtx.fillText(Math.round(gain * 100) + '%', x, MID - amp - 13);
       wfCtx.textAlign = 'left';
     }
-
     wfCtx.globalAlpha = 1;
   });
 
   // Playhead
-  if (dur > 0) {
+  if (S.videoDuration > 0) {
     const px = timeToX(video.currentTime);
     if (px >= 0 && px <= W) {
-      wfCtx.strokeStyle = S.isRecording ? '#E8403A' : (S.isPreviewing ? '#3A9E6A' : '#E8E4DC');
-      wfCtx.lineWidth   = S.isRecording ? 2 : 1.5;
+      wfCtx.strokeStyle = S.isRecording ? '#E8403A' : (S.isPreviewing ? '#3A9E6A' : '#7A7A7A');
+      wfCtx.lineWidth = S.isRecording ? 2 : 1.5;
       wfCtx.globalAlpha = 0.85;
       wfCtx.beginPath(); wfCtx.moveTo(px, 0); wfCtx.lineTo(px, H); wfCtx.stroke();
       if (S.isRecording) {
-        wfCtx.fillStyle = '#E8403A';
-        wfCtx.globalAlpha = 1;
+        wfCtx.fillStyle = '#E8403A'; wfCtx.globalAlpha = 1;
         wfCtx.beginPath(); wfCtx.arc(px, 9, 5, 0, Math.PI * 2); wfCtx.fill();
       }
       wfCtx.globalAlpha = 1;
@@ -594,59 +619,40 @@ function drawWaveform() {
 
 window.addEventListener('resize', () => { drawWaveform(); updateScrollbar(); positionTooltip(); });
 
-// ── Timeline pointer interaction ──────────────────────────────────────────
-const HIT_PX = 12;
+// ── Canvas interaction ────────────────────────────────────────────────────
+const HIT = 12;
 
-function getEvtCoords(e) {
-  const rect   = wfCanvas.getBoundingClientRect();
-  const touch  = e.touches ? e.touches[0] : e;
+function evtCoords(e) {
+  const rect  = wfCanvas.getBoundingClientRect();
+  const touch = e.touches ? e.touches[0] : e;
   return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
 }
 
-function findEventNear(cx) {
-  let best = null, bestD = HIT_PX;
+function nearestEvent(cx) {
+  let best = null, bestD = HIT;
   S.events.forEach(ev => {
-    const ex = timeToX(ev.time);
-    const d  = Math.abs(cx - ex);
+    const d = Math.abs(timeToX(ev.time) - cx);
     if (d < bestD) { bestD = d; best = ev; }
   });
   return best;
 }
 
-// Pointer down
 function onDown(e) {
   if (S.isRecording) return;
   if (e.button !== undefined && e.button !== 0) return;
   e.preventDefault();
-
-  const { x, y } = getEvtCoords(e);
-  const hit = findEventNear(x);
-
+  const { x, y } = evtCoords(e);
+  const hit = nearestEvent(x);
   if (hit) {
     S.selectedEvId = hit.id;
-    const H   = wfCanvas.offsetHeight;
-    const MID = H / 2;
-    const gain = hit.gain !== undefined ? hit.gain : 1;
-    const MAX_AMP = MID * 0.88;
-    const amp = Math.max(4, MAX_AMP * (gain / 2));
-    const dotY = MID - amp;
-
-    // Mode: if clicking near peak dot → gain drag, else move drag
-    const nearPeak = Math.abs(y - dotY) < 14;
-    S.drag = {
-      evId: hit.id,
-      mode: nearPeak ? 'gain' : 'move',
-      startX: x, startY: y,
-      startTime: hit.time,
-      startGain: gain,
-      moved: false,
-    };
-    drawWaveform();
-    positionTooltip();
+    const H = wfCanvas.height, MID = H / 2;
+    const amp = Math.max(5, (MID * 0.86) * Math.min(hit.gain ?? 1, 2) / 2);
+    const nearPeak = Math.abs(y - (MID - amp)) < 14;
+    S.drag = { evId: hit.id, mode: nearPeak ? 'gain' : 'move',
+      startX: x, startY: y, startTime: hit.time, startGain: hit.gain ?? 1, moved: false };
+    drawWaveform(); positionTooltip();
   } else {
-    S.selectedEvId = null;
-    S.drag = null;
-    hideTooltip();
+    S.selectedEvId = null; S.drag = null; hideTooltip();
     if (S.videoDuration > 0 && !S.isPreviewing) {
       video.currentTime = Math.max(0, Math.min(S.videoDuration, xToTime(x)));
     }
@@ -654,45 +660,31 @@ function onDown(e) {
   }
 }
 
-// Pointer move
 function onMove(e) {
   if (!S.drag || S.isRecording) return;
   e.preventDefault();
-  const { x, y } = getEvtCoords(e);
-  const dx = x - S.drag.startX;
-  const dy = y - S.drag.startY;
-
-  if (Math.abs(dx) < 2 && Math.abs(dy) < 2 && !S.drag.moved) return;
+  const { x, y } = evtCoords(e);
+  const dx = x - S.drag.startX, dy = y - S.drag.startY;
+  if (!S.drag.moved && Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
   S.drag.moved = true;
-
   const ev = S.events.find(e => e.id === S.drag.evId);
   if (!ev) return;
-
   if (S.drag.mode === 'move') {
-    const dt = (dx / (wfCanvas.offsetWidth || 1)) * visibleDur();
-    ev.time = Math.max(0, Math.min(S.videoDuration || 999, S.drag.startTime + dt));
+    ev.time = Math.max(0, Math.min(S.videoDuration || 999,
+      S.drag.startTime + (dx / (wfCanvas.offsetWidth || 1)) * visDur()));
     updateLogRow(ev);
   } else {
-    // gain drag: drag up = louder, down = quieter
-    // Map ±(H/2) px to 0–2 gain range
-    const H = wfCanvas.offsetHeight || 88;
-    const deltaGain = -(dy / (H / 2)) * 2;
-    ev.gain = Math.max(0, Math.min(2, S.drag.startGain + deltaGain));
-    updateTooltipVol(ev);
+    ev.gain = Math.max(0, Math.min(2, S.drag.startGain - (dy / (wfCanvas.height / 2)) * 2));
+    syncTooltipVol(ev);
     updateLogRow(ev);
   }
-
-  drawWaveform();
-  positionTooltip();
+  drawWaveform(); positionTooltip();
 }
 
-// Pointer up
 function onUp() {
-  if (S.drag && S.drag.moved) {
+  if (S.drag?.moved) {
     S.events.sort((a, b) => a.time - b.time);
-    rebuildLog();
-    drawWaveform();
-    positionTooltip();
+    rebuildLog(); drawWaveform(); positionTooltip();
   }
   S.drag = null;
 }
@@ -705,116 +697,134 @@ wfCanvas.addEventListener('touchstart', onDown, { passive: false });
 wfCanvas.addEventListener('touchmove',  onMove, { passive: false });
 wfCanvas.addEventListener('touchend',   onUp,   { passive: false });
 
-// ── Pinch-to-zoom (mobile) ────────────────────────────────────────────────
+// Pinch-to-zoom
 wfCanvas.addEventListener('touchstart', e => {
-  if (e.touches.length === 2) {
-    e.preventDefault();
-    const dx = e.touches[0].clientX - e.touches[1].clientX;
-    const dy = e.touches[0].clientY - e.touches[1].clientY;
-    const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2
-                 - wfCanvas.getBoundingClientRect().left;
-    S.pinch = { dist: Math.hypot(dx, dy), zoom: S.zoom, anchorTime: xToTime(midX) };
-  }
+  if (e.touches.length !== 2) return;
+  e.preventDefault();
+  const dx = e.touches[0].clientX - e.touches[1].clientX;
+  const dy = e.touches[0].clientY - e.touches[1].clientY;
+  S.pinch = { dist: Math.hypot(dx, dy), zoom: S.zoom };
 }, { passive: false });
-
 wfCanvas.addEventListener('touchmove', e => {
-  if (e.touches.length === 2 && S.pinch) {
-    e.preventDefault();
-    const dx   = e.touches[0].clientX - e.touches[1].clientX;
-    const dy   = e.touches[0].clientY - e.touches[1].clientY;
-    const dist = Math.hypot(dx, dy);
-    const factor = dist / S.pinch.dist;
-    setZoom(S.pinch.zoom * factor, S.pinch.anchorTime);
-  }
+  if (e.touches.length !== 2 || !S.pinch) return;
+  e.preventDefault();
+  const dx = e.touches[0].clientX - e.touches[1].clientX;
+  const dy = e.touches[0].clientY - e.touches[1].clientY;
+  setZoom(S.pinch.zoom * (Math.hypot(dx, dy) / S.pinch.dist));
 }, { passive: false });
-
-wfCanvas.addEventListener('touchend', e => {
-  if (e.touches.length < 2) S.pinch = null;
-});
+wfCanvas.addEventListener('touchend', () => { S.pinch = null; });
 
 // ── Tooltip ───────────────────────────────────────────────────────────────
 function positionTooltip() {
   const ev = S.events.find(e => e.id === S.selectedEvId);
   if (!ev) { hideTooltip(); return; }
-
   const x   = timeToX(ev.time);
   const W   = wfCanvas.offsetWidth;
-  const col = resolveColor(ev.color);
-
-  tooltipName.textContent = `${ev.label}  ${fmtTime(ev.time)}`;
+  const col = ev.color || '#D4870A';
+  tooltipName.textContent = `${ev.label}  ${fmt(ev.time)}`;
   tooltipName.style.color = col;
-
-  const gain = ev.gain !== undefined ? ev.gain : 1;
-  tooltipVol.value = Math.round(gain * 100);
-  tooltipVolLbl.textContent = Math.round(gain * 100) + '%';
-
+  syncTooltipVol(ev);
   tooltip.classList.remove('hidden');
-
-  // Position: centered above impulse, clamped to canvas
   const tw  = tooltip.offsetWidth;
-  const H_c = wfCanvas.offsetHeight;
   let left  = x - tw / 2;
-  left = Math.max(4, Math.min(W - tw - 4, left));
-  tooltip.style.left = left + 'px';
-  // Place above the canvas (negative top from waveform-inner top)
-  tooltip.style.top = (H_c - 4) + 'px'; // below canvas
+  tooltip.style.left = Math.max(4, Math.min(W - tw - 4, left)) + 'px';
+  tooltip.style.top  = (wfCanvas.offsetHeight + 4) + 'px';
 }
 
-function updateTooltipVol(ev) {
-  const gain = ev.gain !== undefined ? ev.gain : 1;
-  tooltipVol.value = Math.round(gain * 100);
-  tooltipVolLbl.textContent = Math.round(gain * 100) + '%';
+function syncTooltipVol(ev) {
+  const g = ev.gain ?? 1;
+  tooltipVol.value = Math.round(g * 100);
+  tooltipVolLbl.textContent = Math.round(g * 100) + '%';
 }
 
-function hideTooltip() {
-  tooltip.classList.add('hidden');
-  S.selectedEvId = null;
-}
+function hideTooltip() { tooltip.classList.add('hidden'); S.selectedEvId = null; }
 
 tooltipVol.addEventListener('input', () => {
   const ev = S.events.find(e => e.id === S.selectedEvId);
   if (!ev) return;
-  const g = parseFloat(tooltipVol.value) / 100;
-  ev.gain = g;
-  tooltipVolLbl.textContent = Math.round(g * 100) + '%';
-  updateLogRow(ev);
-  drawWaveform();
+  ev.gain = parseFloat(tooltipVol.value) / 100;
+  tooltipVolLbl.textContent = Math.round(ev.gain * 100) + '%';
+  updateLogRow(ev); drawWaveform();
 });
-
 tooltipDelete.addEventListener('click', () => { if (S.selectedEvId) deleteEvent(S.selectedEvId); });
 tooltipChange.addEventListener('click', () => { if (S.selectedEvId) openChangeModal(S.selectedEvId); });
 
 function deleteEvent(id) {
   S.events = S.events.filter(e => e.id !== id);
-  S.selectedEvId = null;
-  hideTooltip();
-  updateEventCount();
-  rebuildLog();
-  drawWaveform();
+  S.selectedEvId = null; hideTooltip();
+  updateEventCount(); rebuildLog(); drawWaveform();
   btnPreview.disabled = S.events.length === 0;
   btnExport.disabled  = S.events.length === 0;
 }
 
-// ── Modal ─────────────────────────────────────────────────────────────────
+// ── Change modal ──────────────────────────────────────────────────────────
 function openChangeModal(evId) {
-  modalGrid.innerHTML = '';
-  const all = [...S.library, ...S.userCats];
-  if (!all.length) { closeModal(); return; }
-  all.forEach(cat => {
-    const btn = document.createElement('button');
-    btn.className = 'modal-cat-btn';
-    btn.innerHTML = `<span style="font-size:18px">${cat.emoji}</span><span>${cat.label}</span>`;
-    btn.addEventListener('click', () => {
-      const ev = S.events.find(e => e.id === evId);
-      if (ev) {
-        const { rrIdx } = AudioEngine.playSample(cat.id, cat.samples || [], cat.isUser || false, cat.userId || null, ev.gain || 1);
-        Object.assign(ev, { catId: cat.id, label: cat.label, color: cat.color,
-          sampleFiles: cat.samples || [], rrIdx, isUser: cat.isUser || false, userId: cat.userId || null });
-      }
-      closeModal(); drawWaveform(); positionTooltip(); rebuildLog();
+  modalContent.innerHTML = '';
+  const ev = S.events.find(e => e.id === evId);
+  if (!ev) return;
+  const info = document.createElement('p');
+  info.style.cssText = 'font-size:11px;color:var(--sub);margin-bottom:10px;font-family:var(--mono)';
+  info.textContent = 'Seleccioná nuevo calzado y superficies:';
+  modalContent.appendChild(info);
+
+  // Mini footwear picker
+  const fwRow = document.createElement('div');
+  fwRow.className = 'fw-grid'; fwRow.style.marginBottom = '10px';
+  let tempFw = S.lib.footwear.find(f => f.id === ev.layers[0]?.fwId) || S.lib.footwear[0];
+  S.lib.footwear.forEach(fw => {
+    const b = document.createElement('button');
+    b.className = 'fw-btn' + (fw.id === tempFw.id ? ' selected' : '');
+    b.innerHTML = `<span class="fw-emoji">${fw.emoji}</span><span class="fw-label">${fw.label}</span>`;
+    b.addEventListener('click', () => {
+      tempFw = fw;
+      fwRow.querySelectorAll('.fw-btn').forEach(x => x.classList.toggle('selected', x === b));
     });
-    modalGrid.appendChild(btn);
+    fwRow.appendChild(b);
   });
+  modalContent.appendChild(fwRow);
+
+  // Mini surface picker
+  let tempSurfs = {};
+  ev.layers.forEach(l => { tempSurfs[l.surface.id] = l.gainMult ?? 1; });
+  const surfDiv = document.createElement('div');
+  S.lib.surfaces.forEach(surf => {
+    const row = document.createElement('div');
+    row.className = 'surface-row';
+    const cb = document.createElement('button');
+    cb.className = 'surf-check' + (tempSurfs[surf.id] !== undefined ? ' selected' : '');
+    cb.style.borderColor = tempSurfs[surf.id] !== undefined ? (surf.color || '') : '';
+    cb.innerHTML = `<span class="surf-emoji">${surf.emoji}</span><span class="surf-name">${surf.label}</span>`;
+    const fw = document.createElement('div');
+    fw.className = 'surf-fader-wrap' + (tempSurfs[surf.id] !== undefined ? '' : ' hidden');
+    fw.innerHTML = `<input type="range" class="surf-fader" min="0" max="200" step="1"
+      value="${Math.round((tempSurfs[surf.id] ?? 1) * 100)}"/>
+      <span class="surf-fader-val">${Math.round((tempSurfs[surf.id] ?? 1) * 100)}%</span>`;
+    fw.querySelector('.surf-fader').addEventListener('input', e => {
+      tempSurfs[surf.id] = parseInt(e.target.value) / 100;
+      fw.querySelector('.surf-fader-val').textContent = e.target.value + '%';
+    });
+    cb.addEventListener('click', () => {
+      if (tempSurfs[surf.id] !== undefined) { delete tempSurfs[surf.id]; cb.classList.remove('selected'); cb.style.borderColor=''; fw.classList.add('hidden'); }
+      else { tempSurfs[surf.id] = 1; cb.classList.add('selected'); cb.style.borderColor = surf.color||''; fw.classList.remove('hidden'); }
+    });
+    row.appendChild(cb); row.appendChild(fw); surfDiv.appendChild(row);
+  });
+  modalContent.appendChild(surfDiv);
+
+  const applyBtn = document.createElement('button');
+  applyBtn.className = 'btn btn-amber btn-sm'; applyBtn.style.cssText = 'width:100%;margin-top:10px';
+  applyBtn.textContent = 'Aplicar';
+  applyBtn.addEventListener('click', () => {
+    if (!Object.keys(tempSurfs).length) return;
+    ev.layers = Object.entries(tempSurfs).map(([sid, gm]) => ({
+      fwId: tempFw.id, surface: S.lib.surfaces.find(s => s.id === sid),
+      gainMult: gm, rrIdx: 0,
+    }));
+    ev.label = `${tempFw.emoji} ${tempFw.label} · ${ev.layers.map(l => l.surface.label).join('+')}`;
+    ev.color  = ev.layers[0]?.surface?.color || '#D4870A';
+    closeModal(); drawWaveform(); positionTooltip(); rebuildLog();
+  });
+  modalContent.appendChild(applyBtn);
   modalOverlay.classList.remove('hidden');
 }
 
@@ -828,48 +838,41 @@ function addLogRow(ev) { sessionLog.insertBefore(makeLogRow(ev), sessionLog.firs
 function makeLogRow(ev) {
   const row = document.createElement('div');
   row.className = 'log-row'; row.dataset.evId = ev.id;
-  const col = resolveColor(ev.color);
-  const gain = ev.gain !== undefined ? ev.gain : 1;
+  const col = ev.color || '#D4870A';
+  const g   = Math.round((ev.gain ?? 1) * 100);
   row.innerHTML = `
-    <span style="color:${col}">${ev.label}</span>
-    <span class="log-tc">${fmtTime(ev.time)}</span>
-    <span class="log-vol">${Math.round(gain * 100)}%</span>`;
+    <span class="log-name" style="color:${col}">${ev.label}</span>
+    <span class="log-tc">${fmt(ev.time)}</span>
+    <span class="log-vol">${g}%</span>`;
   return row;
 }
 
 function updateLogRow(ev) {
   const row = sessionLog.querySelector(`[data-ev-id="${ev.id}"]`);
   if (!row) return;
-  const gain = ev.gain !== undefined ? ev.gain : 1;
-  const tc = row.querySelector('.log-tc');
-  const vl = row.querySelector('.log-vol');
-  if (tc) tc.textContent = fmtTime(ev.time);
-  if (vl) vl.textContent = Math.round(gain * 100) + '%';
+  const tc = row.querySelector('.log-tc'), vl = row.querySelector('.log-vol');
+  if (tc) tc.textContent = fmt(ev.time);
+  if (vl) vl.textContent = Math.round((ev.gain ?? 1) * 100) + '%';
 }
 
 function rebuildLog() {
   sessionLog.innerHTML = '';
   [...S.events].reverse().forEach(ev => sessionLog.appendChild(makeLogRow(ev)));
 }
-
 function clearLog() { sessionLog.innerHTML = ''; }
-
-// ── Hint ──────────────────────────────────────────────────────────────────
-function updateHint() {
-  if (S.isRecording && S.selectedCat) {
-    const total = S.selectedCat.samples ? S.selectedCat.samples.length : 0;
-    const next  = AudioEngine.getRrIdx(S.selectedCat.id, total);
-    hintName.textContent = S.selectedCat.label;
-    hintRr.textContent   = total > 1 ? `→ var ${next + 1}/${total}` : '';
-    hintBar.classList.remove('hidden');
-  } else {
-    hintBar.classList.add('hidden');
-  }
-}
 
 function updateEventCount() {
   const n = S.events.length;
   eventCount.textContent = `${n} evento${n !== 1 ? 's' : ''}`;
+}
+
+function updateHint() {
+  if (S.isRecording) {
+    hintName.textContent = S.selectedFw ? `${S.selectedFw.emoji} ${S.selectedFw.label}` : '—';
+    hintBar.classList.remove('hidden');
+  } else {
+    hintBar.classList.add('hidden');
+  }
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────

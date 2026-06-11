@@ -1,95 +1,107 @@
 /**
- * audio.js — Foley Recorder v3 · Audio Engine
- * - Síntesis procedural por categoría (fallback sin WAV)
+ * audio.js — Foley Recorder v4 · Audio Engine
+ * - Síntesis procedural por categoría calzado+superficie
  * - Carga/caché de buffers desde servidor
- * - Carga de samples de usuario
- * - Round-robin por categoría
- * - Render offline 48 kHz → WAV 16-bit stereo con ganancia por evento
+ * - Round-robin por combo (catKey = fw_surface)
+ * - Render offline 48 kHz con layers y gain por capa
  */
 'use strict';
 
 window.AudioEngine = (() => {
 
   let _ctx = null;
+  const _buffers  = {};   // url    → AudioBuffer
+  const _userBufs = {};   // id     → AudioBuffer
+  const _rrIdx    = {};   // catKey → int (round-robin counter)
 
-  const _serverBuffers = {};  // url → AudioBuffer
-  const _userBuffers   = {};  // id  → AudioBuffer
-  const _rrCounters    = {};  // catId → int
-
-  // ── AudioContext ────────────────────────────────────────────────────────
   function getCtx() {
     if (!_ctx) _ctx = new (window.AudioContext || window.webkitAudioContext)();
     if (_ctx.state === 'suspended') _ctx.resume();
     return _ctx;
   }
 
-  // ── Fetch + decode con caché ────────────────────────────────────────────
-  async function _fetchBuffer(url) {
-    if (_serverBuffers[url]) return _serverBuffers[url];
-    const ctx = getCtx();
+  // ── Buffer fetch & cache ────────────────────────────────────────────────
+  async function _fetch(url) {
+    if (_buffers[url]) return _buffers[url];
     try {
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const ab  = await res.arrayBuffer();
-      const buf = await ctx.decodeAudioData(ab);
-      _serverBuffers[url] = buf;
+      const buf = await getCtx().decodeAudioData(await res.arrayBuffer());
+      _buffers[url] = buf;
       return buf;
     } catch (e) {
-      console.warn(`[audio] No se pudo cargar ${url}:`, e.message);
+      console.warn('[audio] Cannot load', url, e.message);
       return null;
     }
   }
 
-  async function preloadCategory(cat) {
-    if (!cat.samples || !cat.samples.length) return;
-    await Promise.all(cat.samples.map(s => _fetchBuffer(s.file)));
+  async function preloadSurface(fwId, surface) {
+    const files = _resolveFiles(fwId, surface);
+    await Promise.all(files.map(f => _fetch(f.file)));
+  }
+
+  // Resolve {{fw}} template
+  function _resolveFiles(fwId, surface) {
+    return (surface.samples || []).map(s => ({
+      ...s,
+      file: s.file.replace('{{fw}}', fwId),
+    }));
   }
 
   // ── Round-robin ─────────────────────────────────────────────────────────
-  function _pickBuffer(catId, sampleFiles) {
-    if (!sampleFiles.length) return { buf: null, idx: 0 };
-    if (!_rrCounters[catId]) _rrCounters[catId] = 0;
-    const idx = _rrCounters[catId] % sampleFiles.length;
-    _rrCounters[catId]++;
-    return { buf: _serverBuffers[sampleFiles[idx].file] || null, idx };
+  function _pickBuffer(catKey, files) {
+    if (!files.length) return { buf: null, idx: 0 };
+    if (_rrIdx[catKey] === undefined) _rrIdx[catKey] = 0;
+    const idx = _rrIdx[catKey] % files.length;
+    _rrIdx[catKey]++;
+    return { buf: _buffers[files[idx].file] || null, idx };
   }
 
-  function getRrIdx(catId, total) {
-    if (!total) return 0;
-    return (_rrCounters[catId] || 0) % total;
+  function getRrIdx(catKey, total) {
+    return total ? (_rrIdx[catKey] || 0) % total : 0;
   }
 
   // ── User sample ─────────────────────────────────────────────────────────
   async function loadUserSample(file) {
     const ctx = getCtx();
-    const ab  = await file.arrayBuffer();
-    const buf = await ctx.decodeAudioData(ab);
+    const buf = await ctx.decodeAudioData(await file.arrayBuffer());
     const id  = 'u_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
-    _userBuffers[id] = buf;
+    _userBufs[id] = buf;
     return { id, name: file.name.replace(/\.[^.]+$/, '') };
   }
 
-  // ── Síntesis procedural ─────────────────────────────────────────────────
+  // ── Synthesis (fallback) ────────────────────────────────────────────────
+  // Maps fw+surface → synthesis character
   const SYNTH = {
-    madera:  { freq:210, q:8,  nf:2100, nl:.13, dc:.30, g:.70 },
-    parquet: { freq:190, q:7,  nf:2000, nl:.14, dc:.32, g:.68 },
-    cemento: { freq: 80, q:3,  nf:3000, nl:.08, dc:.22, g:.75 },
-    grava:   { freq:150, q:1,  nf: 900, nl:.24, dc:.40, g:.65 },
-    metal:   { freq:500, q:20, nf:4000, nl:.05, dc:.50, g:.60 },
-    default: { freq:160, q:4,  nf:2000, nl:.10, dc:.28, g:.68 },
+    bota_limpia:      { freq:180, q:8,  nf:2000, nl:.10, dc:.28, g:.72 },
+    bota_arenosa:     { freq:160, q:2,  nf: 700, nl:.22, dc:.38, g:.65 },
+    bota_humeda:      { freq:140, q:4,  nf:1200, nl:.18, dc:.34, g:.68 },
+    bota_agua:        { freq:120, q:2,  nf: 600, nl:.28, dc:.45, g:.62 },
+    zapatilla_limpia: { freq:220, q:7,  nf:2400, nl:.09, dc:.24, g:.68 },
+    zapatilla_arenosa:{ freq:200, q:2,  nf: 800, nl:.20, dc:.35, g:.62 },
+    zapatilla_humeda: { freq:170, q:4,  nf:1100, nl:.16, dc:.30, g:.65 },
+    zapatilla_agua:   { freq:150, q:2,  nf: 650, nl:.25, dc:.40, g:.60 },
+    taco_limpia:      { freq:380, q:18, nf:3500, nl:.06, dc:.22, g:.75 },
+    taco_arenosa:     { freq:300, q:5,  nf:1000, nl:.14, dc:.30, g:.65 },
+    taco_humeda:      { freq:280, q:8,  nf:1500, nl:.12, dc:.28, g:.68 },
+    taco_agua:        { freq:220, q:4,  nf: 700, nl:.20, dc:.36, g:.62 },
+    descalzo_limpia:  { freq:140, q:3,  nf:1500, nl:.14, dc:.26, g:.60 },
+    descalzo_arenosa: { freq:120, q:1,  nf: 500, nl:.26, dc:.40, g:.55 },
+    descalzo_humeda:  { freq:110, q:2,  nf: 800, nl:.20, dc:.34, g:.58 },
+    descalzo_agua:    { freq:100, q:1,  nf: 400, nl:.32, dc:.48, g:.52 },
+    default:          { freq:180, q:5,  nf:1800, nl:.12, dc:.28, g:.65 },
   };
 
-  function _synthToNode(ctx, catId, dest, when, gainMult) {
-    const t   = Math.max(when, ctx.currentTime);
-    const cfg = SYNTH[catId] || SYNTH.default;
-    const gv  = cfg.g * (gainMult !== undefined ? gainMult : 1);
+  function _synthToNode(ctx, catKey, dest, when, gainMult) {
+    const t   = Math.max(when, ctx.currentTime + 0.001);
+    const cfg = SYNTH[catKey] || SYNTH.default;
+    const gv  = cfg.g * (gainMult ?? 1);
 
     const master = ctx.createGain();
     master.gain.setValueAtTime(gv, t);
     master.gain.exponentialRampToValueAtTime(0.001, t + cfg.dc + .05);
     master.connect(dest);
 
-    // Tonal body
     const osc = ctx.createOscillator();
     const bpf = ctx.createBiquadFilter();
     const og  = ctx.createGain();
@@ -100,9 +112,8 @@ window.AudioEngine = (() => {
     og.gain.setValueAtTime(.55, t);
     og.gain.exponentialRampToValueAtTime(0.001, t + cfg.dc);
     osc.connect(bpf); bpf.connect(og); og.connect(master);
-    osc.start(t); osc.stop(t + cfg.dc + .06);
+    osc.start(t); osc.stop(t + cfg.dc + .07);
 
-    // Noise burst
     const nLen = Math.ceil(ctx.sampleRate * cfg.nl);
     const nb   = ctx.createBuffer(1, nLen, ctx.sampleRate);
     const nd   = nb.getChannelData(0);
@@ -114,116 +125,107 @@ window.AudioEngine = (() => {
     ng.gain.setValueAtTime(.45, t);
     ng.gain.exponentialRampToValueAtTime(0.001, t + cfg.nl);
     ns.connect(hpf); hpf.connect(ng); ng.connect(master);
-    ns.start(t); ns.stop(t + cfg.nl + .02);
+    ns.start(t); ns.stop(t + cfg.nl + .03);
   }
 
-  // gainMult: 0.0–2.0 (1.0 = nominal)
-  function _bufferToNode(ctx, buf, dest, when, gainMult) {
-    const t   = Math.max(when, ctx.currentTime);
+  function _bufToNode(ctx, buf, dest, when, gainMult) {
+    const t   = Math.max(when, ctx.currentTime + 0.001);
     const src = ctx.createBufferSource();
     const g   = ctx.createGain();
     src.buffer = buf;
-    g.gain.setValueAtTime(.85 * (gainMult !== undefined ? gainMult : 1), t);
+    g.gain.setValueAtTime(.85 * (gainMult ?? 1), t);
     src.connect(g); g.connect(dest);
     src.start(t);
     return src;
   }
 
-  // ── Playback en tiempo real ─────────────────────────────────────────────
-  // gainMult viene del ev.gain (0–2), default 1
-  function playSample(catId, sampleFiles, isUser, userId, gainMult = 1) {
-    const ctx = getCtx();
-    const t   = ctx.currentTime;
-    if (isUser) {
-      const buf = _userBuffers[userId];
-      if (buf) _bufferToNode(ctx, buf, ctx.destination, t, gainMult);
-      return { rrIdx: 0 };
-    }
-    const { buf, idx } = _pickBuffer(catId, sampleFiles);
+  // ── Play a single layer ─────────────────────────────────────────────────
+  // layer: { fwId, surface, files, gainMult }
+  // Returns { rrIdx }
+  function _playLayer(ctx, dest, when, layer) {
+    const catKey = `${layer.fwId}_${layer.surface.id}`;
+    const files  = _resolveFiles(layer.fwId, layer.surface);
+    const { buf, idx } = _pickBuffer(catKey, files);
     if (buf) {
-      _bufferToNode(ctx, buf, ctx.destination, t, gainMult);
+      _bufToNode(ctx, buf, dest, when, layer.gainMult ?? 1);
     } else {
-      _synthToNode(ctx, catId, ctx.destination, t, gainMult);
+      _synthToNode(ctx, catKey, dest, when, layer.gainMult ?? 1);
     }
-    return { rrIdx: idx };
+    return { rrIdx: idx, catKey };
   }
 
-  // ── Playback programado (preview preciso) ───────────────────────────────
-  function scheduleEvent(ev, when) {
+  // ── Public: play all active layers (real-time) ──────────────────────────
+  // layers: [{ fwId, surface, files, gainMult, rrIdx }]
+  // Returns array of { rrIdx, catKey } per layer
+  function playLayers(layers) {
     const ctx = getCtx();
-    const gm  = ev.gain !== undefined ? ev.gain : 1;
-    if (ev.isUser) {
-      const buf = _userBuffers[ev.userId];
-      if (buf) return _bufferToNode(ctx, buf, ctx.destination, when, gm);
-    } else {
-      const files = ev.sampleFiles || [];
-      if (files.length) {
-        const fileEntry = files[ev.rrIdx % files.length];
-        const buf = _serverBuffers[fileEntry.file];
-        if (buf) return _bufferToNode(ctx, buf, ctx.destination, when, gm);
-      }
-      _synthToNode(ctx, ev.catId, ctx.destination, when, gm);
-    }
-    return null;
+    const now = ctx.currentTime;
+    return layers.map(layer => _playLayer(ctx, ctx.destination, now, layer));
   }
 
-  // ── Render offline 48 kHz → WAV ─────────────────────────────────────────
+  // ── Public: schedule layers at precise time (preview) ──────────────────
+  function scheduleLayers(layers, when) {
+    const ctx = getCtx();
+    layers.forEach(layer => {
+      const catKey = `${layer.fwId}_${layer.surface.id}`;
+      const files  = _resolveFiles(layer.fwId, layer.surface);
+      const file   = files[layer.rrIdx % Math.max(1, files.length)];
+      const buf    = file ? _buffers[file.file] : null;
+      if (buf) {
+        _bufToNode(ctx, ctx.destination, when, { ...layer, gainMult: layer.gainMult ?? 1 });
+      } else {
+        _synthToNode(ctx, catKey, ctx.destination, when, layer.gainMult ?? 1);
+      }
+    });
+  }
+
+  // ── Public: offline render 48 kHz ───────────────────────────────────────
+  // events: [{ time, gain, layers:[{ fwId, surface, rrIdx, gainMult }] }]
   async function renderToWav(events, duration, sr = 48000) {
     if (!events.length) throw new Error('Sin eventos');
-    const total  = duration + 0.8;
-    const offCtx = new OfflineAudioContext(2, Math.ceil(total * sr), sr);
+    const offCtx = new OfflineAudioContext(2, Math.ceil((duration + 0.8) * sr), sr);
 
     for (const ev of events) {
-      const when = Math.max(0, ev.time);
-      const gm   = ev.gain !== undefined ? ev.gain : 1;
-      if (ev.isUser) {
-        const buf = _userBuffers[ev.userId];
-        if (buf) _bufferToNode(offCtx, buf, offCtx.destination, when, gm);
-      } else {
-        const files = ev.sampleFiles || [];
-        if (files.length) {
-          const fileEntry = files[ev.rrIdx % files.length];
-          const buf = _serverBuffers[fileEntry.file];
-          if (buf) {
-            _bufferToNode(offCtx, buf, offCtx.destination, when, gm);
-          } else {
-            _synthToNode(offCtx, ev.catId, offCtx.destination, when, gm);
-          }
+      const when     = Math.max(0, ev.time);
+      const evGain   = ev.gain ?? 1;
+      const masterG  = offCtx.createGain();
+      masterG.gain.value = evGain;
+      masterG.connect(offCtx.destination);
+
+      for (const layer of (ev.layers || [])) {
+        const catKey = `${layer.fwId}_${layer.surface.id}`;
+        const files  = _resolveFiles(layer.fwId, layer.surface);
+        const file   = files[layer.rrIdx % Math.max(1, files.length)];
+        const buf    = file ? _buffers[file.file] : null;
+        if (buf) {
+          _bufToNode(offCtx, buf, masterG, when, layer.gainMult ?? 1);
         } else {
-          _synthToNode(offCtx, ev.catId, offCtx.destination, when, gm);
+          _synthToNode(offCtx, catKey, masterG, when, layer.gainMult ?? 1);
         }
       }
     }
 
-    const rendered = await offCtx.startRendering();
-    return _toWav(rendered);
+    return _toWav(await offCtx.startRendering());
   }
 
-  // ── PCM → WAV 16-bit ────────────────────────────────────────────────────
   function _toWav(buffer) {
-    const nCh = buffer.numberOfChannels;
-    const sr  = buffer.sampleRate;
-    const n   = buffer.length;
-    const blk = nCh * 2;
-    const ab  = new ArrayBuffer(44 + n * blk);
-    const v   = new DataView(ab);
-    const ws  = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
-    ws(0, 'RIFF'); v.setUint32(4, 36 + n * blk, true);
-    ws(8, 'WAVE'); ws(12, 'fmt '); v.setUint32(16, 16, true);
-    v.setUint16(20, 1, true); v.setUint16(22, nCh, true);
-    v.setUint32(24, sr, true); v.setUint32(28, sr * blk, true);
-    v.setUint16(32, blk, true); v.setUint16(34, 16, true);
-    ws(36, 'data'); v.setUint32(40, n * blk, true);
+    const nCh = buffer.numberOfChannels, sr = buffer.sampleRate, n = buffer.length;
+    const blk = nCh * 2, ab = new ArrayBuffer(44 + n * blk), v = new DataView(ab);
+    const ws = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    ws(0,'RIFF'); v.setUint32(4, 36 + n * blk, true);
+    ws(8,'WAVE'); ws(12,'fmt '); v.setUint32(16, 16, true);
+    v.setUint16(20,1,true); v.setUint16(22,nCh,true);
+    v.setUint32(24,sr,true); v.setUint32(28,sr*blk,true);
+    v.setUint16(32,blk,true); v.setUint16(34,16,true);
+    ws(36,'data'); v.setUint32(40,n*blk,true);
     let o = 44;
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < n; i++)
       for (let c = 0; c < nCh; c++) {
-        const s = Math.max(-1, Math.min(1, buffer.getChannelData(c < nCh ? c : 0)[i]));
-        v.setInt16(o, s * 0x7FFF, true); o += 2;
+        v.setInt16(o, Math.max(-1,Math.min(1,buffer.getChannelData(c)[i])) * 0x7FFF, true);
+        o += 2;
       }
-    }
     return new Blob([ab], { type: 'audio/wav' });
   }
 
-  return { getCtx, preloadCategory, loadUserSample, playSample, scheduleEvent, renderToWav, getRrIdx };
-
+  return { getCtx, preloadSurface, loadUserSample, playLayers, scheduleLayers, renderToWav, getRrIdx };
 })();

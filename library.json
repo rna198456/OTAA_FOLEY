@@ -1,56 +1,37 @@
 {
-  "categories": [
-    {
-      "id": "madera",
-      "label": "Madera",
-      "emoji": "🪵",
-      "color": "#8B5E3C",
+  "footwear": [
+    { "id": "bota",       "label": "Bota",      "emoji": "👢" },
+    { "id": "zapatilla",  "label": "Zapatilla",  "emoji": "👟" },
+    { "id": "taco",       "label": "Taco",       "emoji": "👠" },
+    { "id": "descalzo",   "label": "Descalzo",   "emoji": "🦶" }
+  ],
+  "surfaces": [
+    { "id": "limpia",   "label": "Limpia",   "emoji": "🏛️",  "color": "#6B8C6B",
       "samples": [
-        { "file": "samples/madera/tablon_01.wav", "label": "Tablón 1" },
-        { "file": "samples/madera/tablon_02.wav", "label": "Tablón 2" },
-        { "file": "samples/madera/tablon_03.wav", "label": "Tablón 3" }
+        { "file": "samples/{{fw}}_limpia/paso_01.wav",  "label": "Paso 1" },
+        { "file": "samples/{{fw}}_limpia/paso_02.wav",  "label": "Paso 2" },
+        { "file": "samples/{{fw}}_limpia/paso_03.wav",  "label": "Paso 3" }
       ]
     },
-    {
-      "id": "parquet",
-      "label": "Parquet",
-      "emoji": "🪵",
-      "color": "#A0724A",
+    { "id": "arenosa",  "label": "Arenosa",  "emoji": "🏖️",  "color": "#9B8B6A",
       "samples": [
-        { "file": "samples/madera/parquet_01.wav", "label": "Parquet 1" },
-        { "file": "samples/madera/parquet_02.wav", "label": "Parquet 2" }
+        { "file": "samples/{{fw}}_arenosa/paso_01.wav", "label": "Paso 1" },
+        { "file": "samples/{{fw}}_arenosa/paso_02.wav", "label": "Paso 2" },
+        { "file": "samples/{{fw}}_arenosa/paso_03.wav", "label": "Paso 3" }
       ]
     },
-    {
-      "id": "cemento",
-      "label": "Cemento",
-      "emoji": "🏗️",
-      "color": "#6B6B6B",
+    { "id": "humeda",   "label": "Húmeda",   "emoji": "💧",  "color": "#5A8A9F",
       "samples": [
-        { "file": "samples/cemento/cemento_01.wav", "label": "Cemento 1" },
-        { "file": "samples/cemento/cemento_02.wav", "label": "Cemento 2" },
-        { "file": "samples/cemento/cemento_03.wav", "label": "Cemento 3" }
+        { "file": "samples/{{fw}}_humeda/paso_01.wav",  "label": "Paso 1" },
+        { "file": "samples/{{fw}}_humeda/paso_02.wav",  "label": "Paso 2" },
+        { "file": "samples/{{fw}}_humeda/paso_03.wav",  "label": "Paso 3" }
       ]
     },
-    {
-      "id": "grava",
-      "label": "Grava",
-      "emoji": "🪨",
-      "color": "#9B8B6A",
+    { "id": "agua",     "label": "Agua",     "emoji": "🌊",  "color": "#3A7AB0",
       "samples": [
-        { "file": "samples/grava/grava_01.wav", "label": "Grava 1" },
-        { "file": "samples/grava/grava_02.wav", "label": "Grava 2" },
-        { "file": "samples/grava/grava_03.wav", "label": "Grava 3" }
-      ]
-    },
-    {
-      "id": "metal",
-      "label": "Metal",
-      "emoji": "⚙️",
-      "color": "#5A8A9F",
-      "samples": [
-        { "file": "samples/metal/metal_01.wav", "label": "Metal 1" },
-        { "file": "samples/metal/metal_02.wav", "label": "Metal 2" }
+        { "file": "samples/{{fw}}_agua/paso_01.wav",    "label": "Paso 1" },
+        { "file": "samples/{{fw}}_agua/paso_02.wav",    "label": "Paso 2" },
+        { "file": "samples/{{fw}}_agua/paso_03.wav",    "label": "Paso 3" }
       ]
     }
   ]
