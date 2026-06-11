@@ -18,11 +18,11 @@
     <div class="logo-box">👣</div>
     <div class="header-titles">
       <span class="app-name">FOLEY RECORDER</span>
-      <span class="app-sub">Oficios y Técnicas de las Artes Audiovisuales· Cátedra Corti</span>
+      <span class="app-sub">Oficios y Técnicas · Cátedra Corti</span>
     </div>
   </div>
   <div class="header-right">
-    <div id="rec-indicator"  class="rec-indicator hidden"><span class="rec-dot"></span><span>REC</span></div>
+    <div id="rec-indicator"  class="rec-indicator  hidden"><span class="rec-dot"></span><span>REC</span></div>
     <div id="play-indicator" class="play-indicator hidden"><span>▶</span><span>PLAY</span></div>
     <div id="timecode" class="timecode">00:00.00</div>
     <label class="btn btn-ghost btn-sm">+ Video
@@ -33,6 +33,7 @@
 
 <main id="app-main">
 
+  <!-- ── VIDEO COLUMN ───────────────────────────────────────────────── -->
   <div id="video-col">
     <div id="video-zone" class="dropzone">
       <video id="video-el" playsinline></video>
@@ -45,16 +46,48 @@
       </div>
     </div>
 
+    <!-- ── TIMELINE ──────────────────────────────────────────────────── -->
     <div id="timeline-panel">
-      <div id="waveform-wrap">
-        <canvas id="waveform"></canvas>
-        <div id="event-tooltip" class="event-tooltip hidden">
-          <span id="tooltip-name"></span>
-          <button id="tooltip-change" class="tooltip-btn" title="Cambiar sample">⇄</button>
-          <button id="tooltip-delete" class="tooltip-btn tooltip-delete" title="Eliminar">✕</button>
+
+      <!-- Zoom controls + timeline header -->
+      <div id="timeline-toolbar">
+        <span class="tl-label">TIMELINE</span>
+        <div class="zoom-controls">
+          <button id="btn-zoom-out"  class="zoom-btn" title="Zoom out">−</button>
+          <span   id="zoom-label"    class="zoom-label">1×</span>
+          <button id="btn-zoom-in"   class="zoom-btn" title="Zoom in">+</button>
+          <button id="btn-zoom-fit"  class="zoom-btn zoom-fit" title="Fit">FIT</button>
+        </div>
+        <span id="tl-hint" class="tl-hint">scroll=zoom · drag=mover · ↕ vol</span>
+      </div>
+
+      <!-- Canvas wrapper (clips overflow for scroll) -->
+      <div id="waveform-outer">
+        <div id="waveform-inner">
+          <canvas id="waveform"></canvas>
+          <!-- Tooltip anchored inside inner -->
+          <div id="event-tooltip" class="event-tooltip hidden">
+            <span id="tooltip-name"></span>
+            <div class="tooltip-vol-wrap">
+              <span class="tooltip-vol-icon">🔊</span>
+              <input id="tooltip-vol" type="range" min="0" max="200" step="1" value="100"
+                     class="tooltip-vol-slider" title="Volumen" />
+              <span id="tooltip-vol-label" class="tooltip-vol-label">100%</span>
+            </div>
+            <div class="tooltip-actions">
+              <button id="tooltip-change" class="tooltip-btn" title="Cambiar sample">⇄</button>
+              <button id="tooltip-delete" class="tooltip-btn tooltip-delete" title="Eliminar">✕</button>
+            </div>
+          </div>
+        </div>
+        <!-- Scrollbar for zoomed view -->
+        <div id="tl-scrollbar-wrap">
+          <div id="tl-scrollbar-thumb"></div>
         </div>
       </div>
+
       <div id="progress-wrap"><div id="progress-fill"></div></div>
+
       <div id="controls-row">
         <button id="btn-record"  class="btn btn-amber" disabled>● GRABAR</button>
         <button id="btn-stop"    class="btn btn-red"   disabled style="display:none">■ DETENER</button>
@@ -69,6 +102,7 @@
     </div>
   </div>
 
+  <!-- ── LIBRARY COLUMN ─────────────────────────────────────────────── -->
   <div id="library-col">
     <div id="library-header">
       <span class="section-label">SUPERFICIE</span>
@@ -76,7 +110,9 @@
         <input type="file" id="custom-sample-input" accept="audio/*" multiple style="display:none" />
       </label>
     </div>
-    <div id="library-loading" class="library-loading"><span class="loading-spinner"></span>Cargando…</div>
+    <div id="library-loading" class="library-loading">
+      <span class="loading-spinner"></span>Cargando…
+    </div>
     <div id="library-grid"></div>
     <div id="session-log-wrap">
       <div class="section-label" style="padding:8px 14px 4px">SESIÓN</div>
@@ -86,7 +122,7 @@
 
 </main>
 
-<!-- Modal: cambiar sample de un evento -->
+<!-- ── CHANGE-SAMPLE MODAL ─────────────────────────────────────────────── -->
 <div id="modal-overlay" class="modal-overlay hidden">
   <div id="modal-box" class="modal-box">
     <div class="modal-title">Cambiar sample del evento</div>
