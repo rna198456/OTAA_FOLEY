@@ -6,32 +6,60 @@
     { "id": "descalzo",   "label": "Descalzo",   "emoji": "🦶" }
   ],
   "surfaces": [
-    { "id": "limpia",   "label": "Limpia",   "emoji": "🏛️",  "color": "#6B8C6B",
+    { "id": "asfalto",  "label": "Asfalto",  "emoji": "🛣️",  "color": "#5A5A6A",
       "samples": [
-        { "file": "samples/{{fw}}_limpia/paso_01.wav",  "label": "Paso 1" },
-        { "file": "samples/{{fw}}_limpia/paso_02.wav",  "label": "Paso 2" },
-        { "file": "samples/{{fw}}_limpia/paso_03.wav",  "label": "Paso 3" }
+        { "file": "samples/{{fw}}_asfalto/paso_01.wav",  "label": "Paso 1" },
+        { "file": "samples/{{fw}}_asfalto/paso_02.wav",  "label": "Paso 2" },
+        { "file": "samples/{{fw}}_asfalto/paso_03.wav",  "label": "Paso 3" }
+      ]
+    },
+    { "id": "madera",   "label": "Madera",   "emoji": "🪵",  "color": "#8B5E3C",
+      "samples": [
+        { "file": "samples/{{fw}}_madera/paso_01.wav",   "label": "Paso 1" },
+        { "file": "samples/{{fw}}_madera/paso_02.wav",   "label": "Paso 2" },
+        { "file": "samples/{{fw}}_madera/paso_03.wav",   "label": "Paso 3" }
+      ]
+    },
+    { "id": "hojas",    "label": "Hojas",    "emoji": "🍂",  "color": "#8B6914",
+      "samples": [
+        { "file": "samples/{{fw}}_hojas/paso_01.wav",    "label": "Paso 1" },
+        { "file": "samples/{{fw}}_hojas/paso_02.wav",    "label": "Paso 2" },
+        { "file": "samples/{{fw}}_hojas/paso_03.wav",    "label": "Paso 3" }
+      ]
+    },
+    { "id": "pasto",    "label": "Pasto",    "emoji": "🌿",  "color": "#4A7A3A",
+      "samples": [
+        { "file": "samples/{{fw}}_pasto/paso_01.wav",    "label": "Paso 1" },
+        { "file": "samples/{{fw}}_pasto/paso_02.wav",    "label": "Paso 2" },
+        { "file": "samples/{{fw}}_pasto/paso_03.wav",    "label": "Paso 3" }
+      ]
+    },
+    { "id": "piedras",  "label": "Piedras",  "emoji": "🪨",  "color": "#7A6A5A",
+      "samples": [
+        { "file": "samples/{{fw}}_piedras/paso_01.wav",  "label": "Paso 1" },
+        { "file": "samples/{{fw}}_piedras/paso_02.wav",  "label": "Paso 2" },
+        { "file": "samples/{{fw}}_piedras/paso_03.wav",  "label": "Paso 3" }
       ]
     },
     { "id": "arenosa",  "label": "Arenosa",  "emoji": "🏖️",  "color": "#9B8B6A",
       "samples": [
-        { "file": "samples/{{fw}}_arenosa/paso_01.wav", "label": "Paso 1" },
-        { "file": "samples/{{fw}}_arenosa/paso_02.wav", "label": "Paso 2" },
-        { "file": "samples/{{fw}}_arenosa/paso_03.wav", "label": "Paso 3" }
+        { "file": "samples/{{fw}}_arenosa/paso_01.wav",  "label": "Paso 1" },
+        { "file": "samples/{{fw}}_arenosa/paso_02.wav",  "label": "Paso 2" },
+        { "file": "samples/{{fw}}_arenosa/paso_03.wav",  "label": "Paso 3" }
       ]
     },
     { "id": "humeda",   "label": "Húmeda",   "emoji": "💧",  "color": "#5A8A9F",
       "samples": [
-        { "file": "samples/{{fw}}_humeda/paso_01.wav",  "label": "Paso 1" },
-        { "file": "samples/{{fw}}_humeda/paso_02.wav",  "label": "Paso 2" },
-        { "file": "samples/{{fw}}_humeda/paso_03.wav",  "label": "Paso 3" }
+        { "file": "samples/{{fw}}_humeda/paso_01.wav",   "label": "Paso 1" },
+        { "file": "samples/{{fw}}_humeda/paso_02.wav",   "label": "Paso 2" },
+        { "file": "samples/{{fw}}_humeda/paso_03.wav",   "label": "Paso 3" }
       ]
     },
     { "id": "agua",     "label": "Agua",     "emoji": "🌊",  "color": "#3A7AB0",
       "samples": [
-        { "file": "samples/{{fw}}_agua/paso_01.wav",    "label": "Paso 1" },
-        { "file": "samples/{{fw}}_agua/paso_02.wav",    "label": "Paso 2" },
-        { "file": "samples/{{fw}}_agua/paso_03.wav",    "label": "Paso 3" }
+        { "file": "samples/{{fw}}_agua/paso_01.wav",     "label": "Paso 1" },
+        { "file": "samples/{{fw}}_agua/paso_02.wav",     "label": "Paso 2" },
+        { "file": "samples/{{fw}}_agua/paso_03.wav",     "label": "Paso 3" }
       ]
     }
   ]

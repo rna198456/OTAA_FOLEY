@@ -75,7 +75,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 
 /* Canvas wrapper */
 #waveform-outer{position:relative;border-radius:4px;background:#0D0D0F;
-  overflow:visible;touch-action:none;user-select:none}
+  overflow:visible;touch-action:pan-y;user-select:none}
 #waveform{display:block;width:100%;height:88px;cursor:crosshair}
 
 /* Scrollbar — taller for easy drag */
@@ -262,45 +262,134 @@ html,body{height:100%;background:var(--bg);color:var(--text);
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
 .hidden{display:none!important}
 
-/* ══ MOBILE ════════════════════════════════════════════════════════════════ */
+/* ══ MOBILE (≤700px) ════════════════════════════════════════════════════════
+   Strategy: full-height flex column.
+   - Header: fixed 48px
+   - video-col: shrinks to fit video + timeline (auto height)
+   - library-col: fills ALL remaining space, scrolls freely
+   ═══════════════════════════════════════════════════════════════════════════ */
 @media(max-width:700px){
   :root{--hh:48px}
+
+  /* Hide desktop-only elements */
   .app-sub,.event-count,.tl-hint{display:none}
 
-  #app-main{flex-direction:column;height:calc(100vh - var(--hh));overflow:hidden}
+  /* Body takes exactly the screen, no overflow */
+  html,body{overflow:hidden;height:100%;height:100dvh}
 
-  #video-col{flex:0 0 auto;height:34vh;padding:6px 8px 4px;gap:6px;min-height:0}
-  #video-zone{flex:1 1 0;min-height:0}
-  #timeline-panel{padding:5px 8px 6px;gap:4px}
-  #waveform{height:52px}
-  .zoom-btn{width:28px;height:28px;font-size:15px}
-  .zoom-fit{width:36px;font-size:9px}
-  #tl-scroll-track{height:14px}   /* even bigger on mobile */
-  #tl-scroll-thumb{height:12px;top:1px;border-radius:6px}
-  #controls-row{gap:4px}
-  .btn{padding:5px 9px;font-size:9px}
-  .hint-bar{font-size:9px;padding:3px 8px}
-  #progress-wrap{height:4px}
+  /* Full-height flex column */
+  #app-main{
+    flex-direction:column;
+    height:calc(100vh - var(--hh));
+    height:calc(100dvh - var(--hh));
+    overflow:hidden;
+  }
 
-  /* Library: rest of screen, must scroll */
+  /* ── Video column: fixed height, never scrolls ── */
+  #video-col{
+    flex:0 0 auto;        /* don't grow or shrink */
+    height:auto;          /* sized by children */
+    padding:6px 8px 4px;
+    gap:5px;
+    min-height:0;
+    overflow:hidden;
+  }
+
+  /* Video zone: fixed aspect, not too tall */
+  #video-zone{
+    height:22vh;
+    min-height:100px;
+    flex:none;
+  }
+
+  /* Timeline: compact but usable */
+  #timeline-panel{
+    padding:5px 8px 6px;
+    gap:4px;
+    flex-shrink:0;
+  }
+  #waveform{height:48px}
+
+  /* Bigger zoom buttons for touch */
+  .zoom-btn{width:32px;height:32px;font-size:16px}
+  .zoom-fit{width:40px;font-size:10px}
+  .zoom-label{font-size:11px;min-width:30px}
+
+  /* Taller scrollbar thumb for fat fingers */
+  #tl-scroll-track{height:16px;border-radius:8px}
+  #tl-scroll-thumb{height:14px;top:1px;border-radius:7px;min-width:40px}
+
+  /* Controls */
+  #controls-row{gap:5px;flex-wrap:wrap}
+  .btn{padding:7px 11px;font-size:10px}
+  #progress-wrap{height:5px}
+  .hint-bar{font-size:9px;padding:4px 8px}
+
+  /* ── Library column: fills rest, MUST scroll ── */
   #library-col{
-    flex:1 1 0;min-height:0;width:100%;
-    border-left:none;border-top:1px solid var(--border);
+    flex:1 1 0;          /* take all remaining height */
+    min-height:0;        /* allow flex to shrink it */
+    width:100%;
+    border-left:none;
+    border-top:1px solid var(--border);
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;     /* outer clips; scroll is on #library-scroll */
   }
+
+  #library-header{
+    flex-shrink:0;       /* header never shrinks */
+    padding:7px 12px;
+  }
+
+  /* THE critical rule: this must scroll */
   #library-scroll{
-    flex:1 1 0;min-height:0;
-    overflow-y:auto;
-    -webkit-overflow-scrolling:touch;
-    padding:8px 10px;gap:10px;
+    flex:1 1 0;
+    min-height:0;
+    overflow-y:scroll;                  /* always show scrollbar */
+    -webkit-overflow-scrolling:touch;   /* momentum scroll on iOS */
+    overscroll-behavior:contain;
+    padding:8px 10px 20px;             /* bottom pad so last item isn't hidden */
+    gap:10px;
   }
-  .fw-grid{grid-template-columns:repeat(4,1fr);gap:4px}
-  .fw-btn{padding:8px 4px}
-  .fw-emoji{font-size:18px}
+
+  /* Footwear: 4 across */
+  .fw-grid{grid-template-columns:repeat(4,1fr);gap:5px}
+  .fw-btn{padding:10px 4px;min-height:56px}
+  .fw-emoji{font-size:20px}
   .fw-label{font-size:9px}
-  .surf-check{padding:10px 10px;min-height:44px}
-  .btn-trigger{padding:16px;font-size:14px}
-  #trigger-icon{font-size:24px}
-  .modal-box{padding:14px}
+
+  /* Surface rows: bigger touch targets */
+  .surf-check{
+    padding:12px 12px;
+    min-height:48px;    /* WCAG minimum touch target */
+  }
+  .surf-emoji{font-size:18px}
+  .surf-name{font-size:13px}
+
+  /* Fader: easier to grab */
+  .surf-fader-wrap{padding:6px 10px 8px 38px}
+  .surf-fader{height:6px}
+  .surf-fader::-webkit-slider-thumb{width:20px;height:20px}
+  .surf-fader::-moz-range-thumb{width:20px;height:20px}
+
+  /* Trigger button: big and obvious */
+  .btn-trigger{
+    padding:18px 16px;
+    font-size:15px;
+    min-height:60px;
+  }
+  #trigger-icon{font-size:26px}
+  #trigger-label{font-size:12px}
+
+  /* Session log: compact */
+  #log-section{padding-top:8px}
+  .log-row{padding:4px 0;font-size:9px}
+
+  /* Modal */
+  .modal-box{padding:14px;max-height:88vh;max-height:88dvh}
+  .modal-grid{grid-template-columns:1fr}
+  .event-tooltip{min-width:175px;font-size:9px}
 }
 
 @media(min-width:701px) and (max-width:960px){

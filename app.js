@@ -208,10 +208,14 @@ async function loadLibrary() {
         { id:'descalzo',  label:'Descalzo',  emoji:'🦶' },
       ],
       surfaces: [
-        { id:'limpia',  label:'Limpia',  emoji:'🏛️', color:'#6B8C6B', samples:[] },
-        { id:'arenosa', label:'Arenosa', emoji:'🏖️', color:'#9B8B6A', samples:[] },
-        { id:'humeda',  label:'Húmeda',  emoji:'💧', color:'#5A8A9F', samples:[] },
-        { id:'agua',    label:'Agua',    emoji:'🌊', color:'#3A7AB0', samples:[] },
+        { id:'asfalto',  label:'Asfalto',  emoji:'🛣️', color:'#5A5A6A', samples:[] },
+        { id:'madera',   label:'Madera',   emoji:'🪵', color:'#8B5E3C', samples:[] },
+        { id:'hojas',    label:'Hojas',    emoji:'🍂', color:'#8B6914', samples:[] },
+        { id:'pasto',    label:'Pasto',    emoji:'🌿', color:'#4A7A3A', samples:[] },
+        { id:'piedras',  label:'Piedras',  emoji:'🪨', color:'#7A6A5A', samples:[] },
+        { id:'arenosa',  label:'Arenosa',  emoji:'🏖️', color:'#9B8B6A', samples:[] },
+        { id:'humeda',   label:'Húmeda',   emoji:'💧', color:'#5A8A9F', samples:[] },
+        { id:'agua',     label:'Agua',     emoji:'🌊', color:'#3A7AB0', samples:[] },
       ],
     };
   }
@@ -228,8 +232,7 @@ function renderFootwear() {
     btn.className = 'fw-btn';
     btn.dataset.fwId = fw.id;
     btn.innerHTML = `<span class="fw-emoji">${fw.emoji}</span><span class="fw-label">${fw.label}</span>`;
-    btn.addEventListener('click', () => selectFootwear(fw));
-    btn.addEventListener('touchstart', e => { e.preventDefault(); selectFootwear(fw); }, { passive: false });
+    btn.addEventListener('pointerdown', e => { e.preventDefault(); selectFootwear(fw); });
     fwGrid.appendChild(btn);
   });
 }
@@ -257,8 +260,7 @@ function renderSurfaces() {
     checkbox.className = 'surf-check';
     checkbox.dataset.surfId = surf.id;
     checkbox.innerHTML = `<span class="surf-emoji">${surf.emoji}</span><span class="surf-name">${surf.label}</span>`;
-    checkbox.addEventListener('click', () => toggleSurface(surf));
-    checkbox.addEventListener('touchstart', e => { e.preventDefault(); toggleSurface(surf); }, { passive: false });
+    checkbox.addEventListener('pointerdown', e => { e.preventDefault(); toggleSurface(surf); });
 
     const faderWrap = document.createElement('div');
     faderWrap.className = 'surf-fader-wrap hidden';
@@ -327,8 +329,13 @@ function updateTrigger() {
 }
 
 // ── Trigger ───────────────────────────────────────────────────────────────
-btnTrigger.addEventListener('click',      fireTrigger);
-btnTrigger.addEventListener('touchstart', e => { e.preventDefault(); fireTrigger(); }, { passive: false });
+// pointerdown fires once on both mouse and touch — avoids the
+// double-fire / 300ms delay of click+touchstart combo on mobile.
+btnTrigger.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  if (btnTrigger.disabled) return;
+  fireTrigger();
+});
 
 function fireTrigger() {
   const layers = buildLayers();
