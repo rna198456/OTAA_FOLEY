@@ -199,23 +199,23 @@ async function loadLibrary() {
     const res = await fetch('library.json');
     S.lib = await res.json();
   } catch {
-    // Fallback built-in
+    // Fallback si library.json no se puede cargar
     S.lib = {
       footwear: [
-        { id:'bota',      label:'Bota',      emoji:'👢' },
-        { id:'zapatilla', label:'Zapatilla', emoji:'👟' },
-        { id:'taco',      label:'Taco',      emoji:'👠' },
-        { id:'descalzo',  label:'Descalzo',  emoji:'🦶' },
+        { id:'botas',      label:'Botas',      emoji:'👢' },
+        { id:'zapatillas', label:'Zapatillas', emoji:'👟' },
+        { id:'tacos',      label:'Tacos',      emoji:'👠' },
+        { id:'descalzo',   label:'Descalzo',   emoji:'🦶' },
       ],
       surfaces: [
-        { id:'asfalto',  label:'Asfalto',  emoji:'🛣️', color:'#5A5A6A', samples:[] },
-        { id:'madera',   label:'Madera',   emoji:'🪵', color:'#8B5E3C', samples:[] },
-        { id:'hojas',    label:'Hojas',    emoji:'🍂', color:'#8B6914', samples:[] },
-        { id:'pasto',    label:'Pasto',    emoji:'🌿', color:'#4A7A3A', samples:[] },
-        { id:'piedras',  label:'Piedras',  emoji:'🪨', color:'#7A6A5A', samples:[] },
-        { id:'arenosa',  label:'Arenosa',  emoji:'🏖️', color:'#9B8B6A', samples:[] },
-        { id:'humeda',   label:'Húmeda',   emoji:'💧', color:'#5A8A9F', samples:[] },
-        { id:'agua',     label:'Agua',     emoji:'🌊', color:'#3A7AB0', samples:[] },
+        { id:'agua',    label:'Agua',    emoji:'🌊', color:'#3A7AB0', samples:[] },
+        { id:'arena',   label:'Arena',   emoji:'🏖️', color:'#9B8B6A', samples:[] },
+        { id:'asfalto', label:'Asfalto', emoji:'🛣️', color:'#5A5A6A', samples:[] },
+        { id:'hojas',   label:'Hojas',   emoji:'🍂', color:'#8B6914', samples:[] },
+        { id:'humedo',  label:'Húmedo',  emoji:'💧', color:'#5A8A9F', samples:[] },
+        { id:'madera',  label:'Madera',  emoji:'🪵', color:'#8B5E3C', samples:[] },
+        { id:'pasto',   label:'Pasto',   emoji:'🌿', color:'#4A7A3A', samples:[] },
+        { id:'piedras', label:'Piedras', emoji:'🪨', color:'#7A6A5A', samples:[] },
       ],
     };
   }

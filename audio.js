@@ -1,26 +1,30 @@
 /**
- * audio.js — Foley Recorder v4 · Audio Engine
- * - Síntesis procedural por categoría calzado+superficie
- * - Carga/caché de buffers desde servidor
- * - Round-robin por combo (catKey = fw_surface)
- * - Render offline 48 kHz con layers y gain por capa
+ * audio.js — Foley Recorder v6 · Audio Engine
+ *
+ * Selección de samples: ALEATORIA sin repetición inmediata.
+ * Cada combinación calzado+superficie mantiene el índice del último
+ * sample reproducido y garantiza que el siguiente sea diferente.
+ *
+ * Rutas reales: samples/{fw}/{fw}_{surface}-001.wav … -006.wav
+ * Render offline: 48 kHz, PCM 16-bit stereo WAV.
  */
 'use strict';
 
 window.AudioEngine = (() => {
 
   let _ctx = null;
-  const _buffers  = {};   // url    → AudioBuffer
-  const _userBufs = {};   // id     → AudioBuffer
-  const _rrIdx    = {};   // catKey → int (round-robin counter)
+  const _buffers  = {};   // url    → AudioBuffer  (cache)
+  const _userBufs = {};   // id     → AudioBuffer  (user uploads)
+  const _lastIdx  = {};   // catKey → last index played (no-repeat guard)
 
+  // ── AudioContext ────────────────────────────────────────────────────────
   function getCtx() {
     if (!_ctx) _ctx = new (window.AudioContext || window.webkitAudioContext)();
     if (_ctx.state === 'suspended') _ctx.resume();
     return _ctx;
   }
 
-  // ── Buffer fetch & cache ────────────────────────────────────────────────
+  // ── Fetch + decode con cache ────────────────────────────────────────────
   async function _fetch(url) {
     if (_buffers[url]) return _buffers[url];
     try {
@@ -30,35 +34,47 @@ window.AudioEngine = (() => {
       _buffers[url] = buf;
       return buf;
     } catch (e) {
-      console.warn('[audio] Cannot load', url, e.message);
+      console.warn('[audio] No se pudo cargar', url, '—', e.message);
       return null;
     }
   }
 
+  // Precargar todos los samples de una superficie para un calzado dado
   async function preloadSurface(fwId, surface) {
     const files = _resolveFiles(fwId, surface);
     await Promise.all(files.map(f => _fetch(f.file)));
   }
 
-  // Resolve {{fw}} template
+  // Resuelve el template {{fw}} en las rutas del library.json
   function _resolveFiles(fwId, surface) {
     return (surface.samples || []).map(s => ({
       ...s,
-      file: s.file.replace('{{fw}}', fwId),
+      file: s.file.replace(/\{\{fw\}\}/g, fwId),
     }));
   }
 
-  // ── Round-robin ─────────────────────────────────────────────────────────
+  // ── Aleatorio sin repetición inmediata ──────────────────────────────────
+  function _randomIdx(catKey, total) {
+    if (total <= 1) return 0;
+    const last = _lastIdx[catKey] !== undefined ? _lastIdx[catKey] : -1;
+    let idx;
+    // Loop hasta elegir un índice distinto al anterior
+    do { idx = Math.floor(Math.random() * total); } while (idx === last);
+    _lastIdx[catKey] = idx;
+    return idx;
+  }
+
   function _pickBuffer(catKey, files) {
     if (!files.length) return { buf: null, idx: 0 };
-    if (_rrIdx[catKey] === undefined) _rrIdx[catKey] = 0;
-    const idx = _rrIdx[catKey] % files.length;
-    _rrIdx[catKey]++;
+    const idx = _randomIdx(catKey, files.length);
     return { buf: _buffers[files[idx].file] || null, idx };
   }
 
+  // API compat: devuelve un índice de display (no usado para lógica real)
   function getRrIdx(catKey, total) {
-    return total ? (_rrIdx[catKey] || 0) % total : 0;
+    if (!total) return 0;
+    const last = _lastIdx[catKey] !== undefined ? _lastIdx[catKey] : -1;
+    return last === 0 ? (1 % total) : 0;
   }
 
   // ── User sample ─────────────────────────────────────────────────────────
@@ -70,46 +86,43 @@ window.AudioEngine = (() => {
     return { id, name: file.name.replace(/\.[^.]+$/, '') };
   }
 
-  // ── Synthesis (fallback) ────────────────────────────────────────────────
-  // Maps fw+surface → synthesis character
+  // ── Synthesis fallback ──────────────────────────────────────────────────
+  // Usado cuando el WAV no se pudo cargar (404, sin conexión, etc.)
+  // Keys: {calzado}_{superficie} — coinciden con los IDs del library.json
   const SYNTH = {
-    // Bota
-    bota_asfalto:     { freq:190, q:9,  nf:2200, nl:.10, dc:.28, g:.72 },
-    bota_madera:      { freq:200, q:8,  nf:2000, nl:.12, dc:.30, g:.70 },
-    bota_hojas:       { freq:140, q:2,  nf: 600, nl:.26, dc:.36, g:.60 },
-    bota_pasto:       { freq:130, q:2,  nf: 500, nl:.22, dc:.32, g:.58 },
-    bota_piedras:     { freq:160, q:3,  nf:1000, nl:.18, dc:.34, g:.65 },
-    bota_arenosa:     { freq:150, q:2,  nf: 700, nl:.22, dc:.38, g:.63 },
-    bota_humeda:      { freq:140, q:4,  nf:1200, nl:.18, dc:.34, g:.67 },
-    bota_agua:        { freq:120, q:2,  nf: 600, nl:.28, dc:.45, g:.62 },
-    // Zapatilla
-    zapatilla_asfalto:{ freq:230, q:8,  nf:2600, nl:.08, dc:.22, g:.68 },
-    zapatilla_madera: { freq:220, q:7,  nf:2400, nl:.09, dc:.24, g:.67 },
-    zapatilla_hojas:  { freq:120, q:1,  nf: 500, nl:.24, dc:.32, g:.55 },
-    zapatilla_pasto:  { freq:110, q:1,  nf: 450, nl:.20, dc:.28, g:.53 },
-    zapatilla_piedras:{ freq:170, q:3,  nf:1100, nl:.16, dc:.30, g:.62 },
-    zapatilla_arenosa:{ freq:200, q:2,  nf: 800, nl:.20, dc:.35, g:.61 },
-    zapatilla_humeda: { freq:170, q:4,  nf:1100, nl:.16, dc:.30, g:.64 },
-    zapatilla_agua:   { freq:150, q:2,  nf: 650, nl:.25, dc:.40, g:.60 },
-    // Taco
-    taco_asfalto:     { freq:420, q:20, nf:3800, nl:.05, dc:.20, g:.78 },
-    taco_madera:      { freq:400, q:18, nf:3600, nl:.06, dc:.22, g:.76 },
-    taco_hojas:       { freq:240, q:4,  nf:1200, nl:.10, dc:.24, g:.60 },
-    taco_pasto:       { freq:220, q:3,  nf:1000, nl:.12, dc:.26, g:.58 },
-    taco_piedras:     { freq:340, q:10, nf:2400, nl:.08, dc:.26, g:.70 },
-    taco_arenosa:     { freq:300, q:5,  nf:1000, nl:.14, dc:.30, g:.65 },
-    taco_humeda:      { freq:280, q:8,  nf:1500, nl:.12, dc:.28, g:.68 },
-    taco_agua:        { freq:220, q:4,  nf: 700, nl:.20, dc:.36, g:.62 },
-    // Descalzo
-    descalzo_asfalto: { freq:150, q:4,  nf:1800, nl:.12, dc:.24, g:.60 },
-    descalzo_madera:  { freq:140, q:3,  nf:1500, nl:.14, dc:.26, g:.59 },
-    descalzo_hojas:   { freq:100, q:1,  nf: 300, nl:.30, dc:.38, g:.48 },
-    descalzo_pasto:   { freq: 90, q:1,  nf: 280, nl:.28, dc:.36, g:.46 },
-    descalzo_piedras: { freq:120, q:2,  nf: 800, nl:.18, dc:.30, g:.55 },
-    descalzo_arenosa: { freq:120, q:1,  nf: 500, nl:.26, dc:.40, g:.54 },
-    descalzo_humeda:  { freq:110, q:2,  nf: 800, nl:.20, dc:.34, g:.57 },
-    descalzo_agua:    { freq:100, q:1,  nf: 400, nl:.32, dc:.48, g:.52 },
-    default:          { freq:180, q:5,  nf:1800, nl:.12, dc:.28, g:.65 },
+    botas_agua:         { freq:120, q:2,  nf: 600, nl:.28, dc:.45, g:.62 },
+    botas_arena:        { freq:150, q:2,  nf: 700, nl:.22, dc:.38, g:.63 },
+    botas_asfalto:      { freq:190, q:9,  nf:2200, nl:.10, dc:.28, g:.72 },
+    botas_hojas:        { freq:140, q:2,  nf: 600, nl:.26, dc:.36, g:.60 },
+    botas_humedo:       { freq:140, q:4,  nf:1200, nl:.18, dc:.34, g:.67 },
+    botas_madera:       { freq:200, q:8,  nf:2000, nl:.12, dc:.30, g:.70 },
+    botas_pasto:        { freq:130, q:2,  nf: 500, nl:.22, dc:.32, g:.58 },
+    botas_piedras:      { freq:160, q:3,  nf:1000, nl:.18, dc:.34, g:.65 },
+    zapatillas_agua:    { freq:150, q:2,  nf: 650, nl:.25, dc:.40, g:.60 },
+    zapatillas_arena:   { freq:200, q:2,  nf: 800, nl:.20, dc:.35, g:.61 },
+    zapatillas_asfalto: { freq:230, q:8,  nf:2600, nl:.08, dc:.22, g:.68 },
+    zapatillas_hojas:   { freq:120, q:1,  nf: 500, nl:.24, dc:.32, g:.55 },
+    zapatillas_humedo:  { freq:170, q:4,  nf:1100, nl:.16, dc:.30, g:.64 },
+    zapatillas_madera:  { freq:220, q:7,  nf:2400, nl:.09, dc:.24, g:.67 },
+    zapatillas_pasto:   { freq:110, q:1,  nf: 450, nl:.20, dc:.28, g:.53 },
+    zapatillas_piedras: { freq:170, q:3,  nf:1100, nl:.16, dc:.30, g:.62 },
+    tacos_agua:         { freq:220, q:4,  nf: 700, nl:.20, dc:.36, g:.62 },
+    tacos_arena:        { freq:300, q:5,  nf:1000, nl:.14, dc:.30, g:.65 },
+    tacos_asfalto:      { freq:420, q:20, nf:3800, nl:.05, dc:.20, g:.78 },
+    tacos_hojas:        { freq:240, q:4,  nf:1200, nl:.10, dc:.24, g:.60 },
+    tacos_humedo:       { freq:280, q:8,  nf:1500, nl:.12, dc:.28, g:.68 },
+    tacos_madera:       { freq:400, q:18, nf:3600, nl:.06, dc:.22, g:.76 },
+    tacos_pasto:        { freq:220, q:3,  nf:1000, nl:.12, dc:.26, g:.58 },
+    tacos_piedras:      { freq:340, q:10, nf:2400, nl:.08, dc:.26, g:.70 },
+    descalzo_agua:      { freq:100, q:1,  nf: 400, nl:.32, dc:.48, g:.52 },
+    descalzo_arena:     { freq:120, q:1,  nf: 500, nl:.26, dc:.40, g:.54 },
+    descalzo_asfalto:   { freq:150, q:4,  nf:1800, nl:.12, dc:.24, g:.60 },
+    descalzo_hojas:     { freq:100, q:1,  nf: 300, nl:.30, dc:.38, g:.48 },
+    descalzo_humedo:    { freq:110, q:2,  nf: 800, nl:.20, dc:.34, g:.57 },
+    descalzo_madera:    { freq:140, q:3,  nf:1500, nl:.14, dc:.26, g:.59 },
+    descalzo_pasto:     { freq: 90, q:1,  nf: 280, nl:.28, dc:.36, g:.46 },
+    descalzo_piedras:   { freq:120, q:2,  nf: 800, nl:.18, dc:.30, g:.55 },
+    default:            { freq:180, q:5,  nf:1800, nl:.12, dc:.28, g:.65 },
   };
 
   function _synthToNode(ctx, catKey, dest, when, gainMult) {
@@ -122,6 +135,7 @@ window.AudioEngine = (() => {
     master.gain.exponentialRampToValueAtTime(0.001, t + cfg.dc + .05);
     master.connect(dest);
 
+    // Tonal body
     const osc = ctx.createOscillator();
     const bpf = ctx.createBiquadFilter();
     const og  = ctx.createGain();
@@ -134,6 +148,7 @@ window.AudioEngine = (() => {
     osc.connect(bpf); bpf.connect(og); og.connect(master);
     osc.start(t); osc.stop(t + cfg.dc + .07);
 
+    // Noise burst (textura de superficie)
     const nLen = Math.ceil(ctx.sampleRate * cfg.nl);
     const nb   = ctx.createBuffer(1, nLen, ctx.sampleRate);
     const nd   = nb.getChannelData(0);
@@ -160,8 +175,6 @@ window.AudioEngine = (() => {
   }
 
   // ── Play a single layer ─────────────────────────────────────────────────
-  // layer: { fwId, surface, files, gainMult }
-  // Returns { rrIdx }
   function _playLayer(ctx, dest, when, layer) {
     const catKey = `${layer.fwId}_${layer.surface.id}`;
     const files  = _resolveFiles(layer.fwId, layer.surface);
@@ -174,47 +187,46 @@ window.AudioEngine = (() => {
     return { rrIdx: idx, catKey };
   }
 
-  // ── Public: play all active layers (real-time) ──────────────────────────
-  // layers: [{ fwId, surface, files, gainMult, rrIdx }]
-  // Returns array of { rrIdx, catKey } per layer
+  // ── Public: reproducir capas en tiempo real ─────────────────────────────
   function playLayers(layers) {
     const ctx = getCtx();
     const now = ctx.currentTime;
     return layers.map(layer => _playLayer(ctx, ctx.destination, now, layer));
   }
 
-  // ── Public: schedule layers at precise time (preview) ──────────────────
+  // ── Public: programar capas a tiempo preciso (preview) ──────────────────
   function scheduleLayers(layers, when) {
     const ctx = getCtx();
     layers.forEach(layer => {
       const catKey = `${layer.fwId}_${layer.surface.id}`;
       const files  = _resolveFiles(layer.fwId, layer.surface);
+      // En preview usamos el rrIdx grabado para reproducir el sample exacto
       const file   = files[layer.rrIdx % Math.max(1, files.length)];
       const buf    = file ? _buffers[file.file] : null;
       if (buf) {
-        _bufToNode(ctx, ctx.destination, when, { ...layer, gainMult: layer.gainMult ?? 1 });
+        _bufToNode(ctx, buf, ctx.destination, when, layer.gainMult ?? 1);
       } else {
         _synthToNode(ctx, catKey, ctx.destination, when, layer.gainMult ?? 1);
       }
     });
   }
 
-  // ── Public: offline render 48 kHz ───────────────────────────────────────
-  // events: [{ time, gain, layers:[{ fwId, surface, rrIdx, gainMult }] }]
+  // ── Public: render offline 48 kHz → WAV ────────────────────────────────
   async function renderToWav(events, duration, sr = 48000) {
     if (!events.length) throw new Error('Sin eventos');
     const offCtx = new OfflineAudioContext(2, Math.ceil((duration + 0.8) * sr), sr);
 
     for (const ev of events) {
-      const when     = Math.max(0, ev.time);
-      const evGain   = ev.gain ?? 1;
-      const masterG  = offCtx.createGain();
+      const when    = Math.max(0, ev.time);
+      const evGain  = ev.gain ?? 1;
+      const masterG = offCtx.createGain();
       masterG.gain.value = evGain;
       masterG.connect(offCtx.destination);
 
       for (const layer of (ev.layers || [])) {
         const catKey = `${layer.fwId}_${layer.surface.id}`;
         const files  = _resolveFiles(layer.fwId, layer.surface);
+        // Usa el rrIdx guardado al momento de grabar → render idéntico al preview
         const file   = files[layer.rrIdx % Math.max(1, files.length)];
         const buf    = file ? _buffers[file.file] : null;
         if (buf) {
@@ -228,6 +240,7 @@ window.AudioEngine = (() => {
     return _toWav(await offCtx.startRendering());
   }
 
+  // ── PCM → WAV 16-bit stereo ─────────────────────────────────────────────
   function _toWav(buffer) {
     const nCh = buffer.numberOfChannels, sr = buffer.sampleRate, n = buffer.length;
     const blk = nCh * 2, ab = new ArrayBuffer(44 + n * blk), v = new DataView(ab);
@@ -241,11 +254,12 @@ window.AudioEngine = (() => {
     let o = 44;
     for (let i = 0; i < n; i++)
       for (let c = 0; c < nCh; c++) {
-        v.setInt16(o, Math.max(-1,Math.min(1,buffer.getChannelData(c)[i])) * 0x7FFF, true);
+        v.setInt16(o, Math.max(-1, Math.min(1, buffer.getChannelData(c)[i])) * 0x7FFF, true);
         o += 2;
       }
     return new Blob([ab], { type: 'audio/wav' });
   }
 
   return { getCtx, preloadSurface, loadUserSample, playLayers, scheduleLayers, renderToWav, getRrIdx };
+
 })();
