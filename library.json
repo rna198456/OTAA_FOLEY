@@ -29,27 +29,27 @@
       "color": "#3A7AB0",
       "samples": [
         {
-          "file": "samples/{{fw}}/{{fw}}_agua-001.wav",
+          "file": "samples/{{fw}}/{{fw}} agua-001.wav",
           "label": "Paso 1"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_agua-002.wav",
+          "file": "samples/{{fw}}/{{fw}} agua-002.wav",
           "label": "Paso 2"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_agua-003.wav",
+          "file": "samples/{{fw}}/{{fw}} agua-003.wav",
           "label": "Paso 3"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_agua-004.wav",
+          "file": "samples/{{fw}}/{{fw}} agua-004.wav",
           "label": "Paso 4"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_agua-005.wav",
+          "file": "samples/{{fw}}/{{fw}} agua-005.wav",
           "label": "Paso 5"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_agua-006.wav",
+          "file": "samples/{{fw}}/{{fw}} agua-006.wav",
           "label": "Paso 6"
         }
       ]
@@ -61,27 +61,27 @@
       "color": "#9B8B6A",
       "samples": [
         {
-          "file": "samples/{{fw}}/{{fw}}_arena-001.wav",
+          "file": "samples/{{fw}}/{{fw}} arena-001.wav",
           "label": "Paso 1"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_arena-002.wav",
+          "file": "samples/{{fw}}/{{fw}} arena-002.wav",
           "label": "Paso 2"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_arena-003.wav",
+          "file": "samples/{{fw}}/{{fw}} arena-003.wav",
           "label": "Paso 3"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_arena-004.wav",
+          "file": "samples/{{fw}}/{{fw}} arena-004.wav",
           "label": "Paso 4"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_arena-005.wav",
+          "file": "samples/{{fw}}/{{fw}} arena-005.wav",
           "label": "Paso 5"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_arena-006.wav",
+          "file": "samples/{{fw}}/{{fw}} arena-006.wav",
           "label": "Paso 6"
         }
       ]
@@ -93,27 +93,27 @@
       "color": "#5A5A6A",
       "samples": [
         {
-          "file": "samples/{{fw}}/{{fw}}_asfalto-001.wav",
+          "file": "samples/{{fw}}/{{fw}} asfalto-001.wav",
           "label": "Paso 1"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_asfalto-002.wav",
+          "file": "samples/{{fw}}/{{fw}} asfalto-002.wav",
           "label": "Paso 2"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_asfalto-003.wav",
+          "file": "samples/{{fw}}/{{fw}} asfalto-003.wav",
           "label": "Paso 3"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_asfalto-004.wav",
+          "file": "samples/{{fw}}/{{fw}} asfalto-004.wav",
           "label": "Paso 4"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_asfalto-005.wav",
+          "file": "samples/{{fw}}/{{fw}} asfalto-005.wav",
           "label": "Paso 5"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_asfalto-006.wav",
+          "file": "samples/{{fw}}/{{fw}} asfalto-006.wav",
           "label": "Paso 6"
         }
       ]
@@ -125,27 +125,27 @@
       "color": "#8B6914",
       "samples": [
         {
-          "file": "samples/{{fw}}/{{fw}}_hojas-001.wav",
+          "file": "samples/{{fw}}/{{fw}} hojas-001.wav",
           "label": "Paso 1"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_hojas-002.wav",
+          "file": "samples/{{fw}}/{{fw}} hojas-002.wav",
           "label": "Paso 2"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_hojas-003.wav",
+          "file": "samples/{{fw}}/{{fw}} hojas-003.wav",
           "label": "Paso 3"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_hojas-004.wav",
+          "file": "samples/{{fw}}/{{fw}} hojas-004.wav",
           "label": "Paso 4"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_hojas-005.wav",
+          "file": "samples/{{fw}}/{{fw}} hojas-005.wav",
           "label": "Paso 5"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_hojas-006.wav",
+          "file": "samples/{{fw}}/{{fw}} hojas-006.wav",
           "label": "Paso 6"
         }
       ]
@@ -157,27 +157,27 @@
       "color": "#5A8A9F",
       "samples": [
         {
-          "file": "samples/{{fw}}/{{fw}}_humedo-001.wav",
+          "file": "samples/{{fw}}/{{fw}} humedo-001.wav",
           "label": "Paso 1"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_humedo-002.wav",
+          "file": "samples/{{fw}}/{{fw}} humedo-002.wav",
           "label": "Paso 2"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_humedo-003.wav",
+          "file": "samples/{{fw}}/{{fw}} humedo-003.wav",
           "label": "Paso 3"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_humedo-004.wav",
+          "file": "samples/{{fw}}/{{fw}} humedo-004.wav",
           "label": "Paso 4"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_humedo-005.wav",
+          "file": "samples/{{fw}}/{{fw}} humedo-005.wav",
           "label": "Paso 5"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_humedo-006.wav",
+          "file": "samples/{{fw}}/{{fw}} humedo-006.wav",
           "label": "Paso 6"
         }
       ]
@@ -189,27 +189,27 @@
       "color": "#8B5E3C",
       "samples": [
         {
-          "file": "samples/{{fw}}/{{fw}}_madera-001.wav",
+          "file": "samples/{{fw}}/{{fw}} madera-001.wav",
           "label": "Paso 1"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_madera-002.wav",
+          "file": "samples/{{fw}}/{{fw}} madera-002.wav",
           "label": "Paso 2"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_madera-003.wav",
+          "file": "samples/{{fw}}/{{fw}} madera-003.wav",
           "label": "Paso 3"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_madera-004.wav",
+          "file": "samples/{{fw}}/{{fw}} madera-004.wav",
           "label": "Paso 4"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_madera-005.wav",
+          "file": "samples/{{fw}}/{{fw}} madera-005.wav",
           "label": "Paso 5"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_madera-006.wav",
+          "file": "samples/{{fw}}/{{fw}} madera-006.wav",
           "label": "Paso 6"
         }
       ]
@@ -221,27 +221,27 @@
       "color": "#4A7A3A",
       "samples": [
         {
-          "file": "samples/{{fw}}/{{fw}}_pasto-001.wav",
+          "file": "samples/{{fw}}/{{fw}} pasto-001.wav",
           "label": "Paso 1"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_pasto-002.wav",
+          "file": "samples/{{fw}}/{{fw}} pasto-002.wav",
           "label": "Paso 2"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_pasto-003.wav",
+          "file": "samples/{{fw}}/{{fw}} pasto-003.wav",
           "label": "Paso 3"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_pasto-004.wav",
+          "file": "samples/{{fw}}/{{fw}} pasto-004.wav",
           "label": "Paso 4"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_pasto-005.wav",
+          "file": "samples/{{fw}}/{{fw}} pasto-005.wav",
           "label": "Paso 5"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_pasto-006.wav",
+          "file": "samples/{{fw}}/{{fw}} pasto-006.wav",
           "label": "Paso 6"
         }
       ]
@@ -253,27 +253,27 @@
       "color": "#7A6A5A",
       "samples": [
         {
-          "file": "samples/{{fw}}/{{fw}}_piedras-001.wav",
+          "file": "samples/{{fw}}/{{fw}} piedras-001.wav",
           "label": "Paso 1"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_piedras-002.wav",
+          "file": "samples/{{fw}}/{{fw}} piedras-002.wav",
           "label": "Paso 2"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_piedras-003.wav",
+          "file": "samples/{{fw}}/{{fw}} piedras-003.wav",
           "label": "Paso 3"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_piedras-004.wav",
+          "file": "samples/{{fw}}/{{fw}} piedras-004.wav",
           "label": "Paso 4"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_piedras-005.wav",
+          "file": "samples/{{fw}}/{{fw}} piedras-005.wav",
           "label": "Paso 5"
         },
         {
-          "file": "samples/{{fw}}/{{fw}}_piedras-006.wav",
+          "file": "samples/{{fw}}/{{fw}} piedras-006.wav",
           "label": "Paso 6"
         }
       ]
