@@ -4,7 +4,7 @@
 
 OTAA_FOLEY es una herramienta web para **practicar, grabar y editar Foley sincronizado con video** desde el navegador.
 
-La herramienta está pensada especialmente para el trabajo pedagógico: permite experimentar rápidamente con distintas combinaciones de **calzado + superficie**, dispararlas mientras se reproduce una imagen y construir una sesión de eventos sonoros que luego puede revisarse, editarse y exportarse como WAV.
+La herramienta está pensada especialmente para el trabajo pedagógico: permite experimentar rápidamente con distintas combinaciones de **calzado + superficie**, reproducirlas mientras avanza una imagen y construir una sesión de eventos sonoros que luego puede revisarse, editarse y exportarse como WAV.
 
 No requiere instalación ni dependencias externas. Funciona con JavaScript nativo y Web Audio API.
 
@@ -14,7 +14,7 @@ No requiere instalación ni dependencias externas. Funciona con JavaScript nativ
 
 El flujo básico es:
 
-**VIDEO → SELECCIÓN → ENSAYO → GRABACIÓN → TIMELINE → ESCUCHA → EDICIÓN → WAV**
+**VIDEO → SELECCIÓN → ENSAYO → GRABACIÓN → REPRODUCCIÓN → EDICIÓN → WAV**
 
 ### 1. Cargar un video
 
@@ -47,7 +47,7 @@ La selección activa también se refleja en el botón principal de disparo.
 
 **ENSAYO** permite probar las combinaciones sin crear eventos en la timeline.
 
-Los botones reproducen los sonidos normalmente, pero los disparos no quedan registrados.
+El botón **▶ REPRODUCCIÓN** permite reproducir y pausar el video desde la posición actual del playhead. Mientras el video avanza, los botones de calzado y superficie pueden dispararse libremente para probar sonidos sin registrarlos.
 
 Es útil para:
 
@@ -70,7 +70,18 @@ Cada evento conserva:
 - nivel individual de cada capa;
 - sample utilizado en cada capa.
 
-### 6. Timeline
+### 6. REPRODUCCIÓN
+
+La herramienta utiliza un único control **▶ REPRODUCCIÓN** para evitar duplicar funciones.
+
+- Si no existen eventos grabados, reproduce y pausa únicamente el video, permitiendo trabajar en modo ENSAYO.
+- Si existen eventos grabados, reproduce y pausa el video junto con el Foley registrado.
+- La reproducción comienza siempre desde la **posición actual del playhead / timeline**.
+- Al detener la reproducción, la posición alcanzada queda conservada.
+
+Esto permite desplazarse a cualquier punto del video, reproducir desde allí y revisar tanto la imagen como el Foley correspondiente.
+
+### 7. Timeline
 
 La timeline muestra los eventos registrados y el playhead del video.
 
@@ -88,12 +99,6 @@ Incluye:
 Al seleccionar un evento se muestra información adicional sobre sus capas y niveles.
 
 El nivel general se presenta tanto como porcentaje como en dB aproximados.
-
-### 7. Escucha / Preview
-
-**▶ ESCUCHAR** reproduce el resultado a partir de la posición actual del video.
-
-La reproducción utiliza los samples que quedaron registrados en cada evento, por lo que el resultado del preview coincide con la sesión grabada.
 
 ### 8. Undo / Redo
 
@@ -140,7 +145,7 @@ Cada combinación de **calzado + superficie** dispone de varios samples.
 
 El motor realiza una **selección aleatoria sin repetición inmediata**, evitando que el mismo archivo se reproduzca dos veces consecutivas dentro de una misma combinación.
 
-El sample utilizado queda registrado en el evento. De esta manera, el preview y el render final pueden reproducir exactamente la misma elección.
+El sample utilizado queda registrado en el evento. De esta manera, la reproducción y el render final pueden reproducir exactamente la misma elección.
 
 ---
 
@@ -204,6 +209,7 @@ OTAA_FOLEY/
 ├── mobile-fix.js         ← comportamiento táctil de la biblioteca
 ├── enhancements.js       ← selección, timeline, modos, historial y Punch-in
 ├── workflow-guard.js     ← protecciones de flujo entre modos
+├── rehearsal-playback.js ← control unificado de reproducción
 ├── library.json          ← biblioteca de calzado, superficies y samples
 ├── README.md             ← documentación
 └── samples/              ← archivos WAV de la biblioteca
@@ -241,15 +247,15 @@ Una forma de trabajar la herramienta en clase es:
 
 **1. Ensayo**
 
-Explorar diferentes combinaciones de calzado y superficies sin registrar eventos.
+Explorar diferentes combinaciones de calzado y superficies mientras el video se reproduce desde la posición deseada, sin registrar eventos.
 
 **2. Grabación**
 
 Elegir una combinación y ejecutar el Foley siguiendo la imagen.
 
-**3. Revisión**
+**3. Reproducción**
 
-Escuchar la sesión y observar la relación entre los eventos y el movimiento visual.
+Usar **REPRODUCCIÓN** desde distintas posiciones del timeline para revisar la relación entre imagen y Foley.
 
 **4. Edición**
 
@@ -276,6 +282,8 @@ Generar el WAV final para continuar el trabajo en un DAW.
 - ✅ Tecla Espacio para disparar durante la grabación
 - ✅ Modo **Ensayo**
 - ✅ Modo **Grabación**
+- ✅ **Reproducción unificada** de video y Foley
+- ✅ Reproducción desde la posición actual del timeline
 - ✅ Timeline con zoom y navegación
 - ✅ Edición temporal de eventos
 - ✅ Edición de ganancia por evento
@@ -283,7 +291,6 @@ Generar el WAV final para continuar el trabajo en un DAW.
 - ✅ Cambio de combinación de un evento
 - ✅ Undo / Redo
 - ✅ Punch-in por rango IN / OUT
-- ✅ Preview sincronizado
 - ✅ Render offline
 - ✅ Exportación WAV 48 kHz / 16-bit stereo
 - ✅ Interfaz responsive desktop / mobile
