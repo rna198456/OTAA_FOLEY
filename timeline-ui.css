@@ -1,0 +1,39 @@
+/* ── Timeline UI refinements ──────────────────────────────────────────── */
+#waveform {
+  height:108px;
+}
+
+#waveform-outer {
+  min-height:108px;
+}
+
+/* The event menu belongs to the timeline, so keep it above the canvas
+   where it remains visible instead of falling below the panel. */
+.event-tooltip {
+  z-index:50;
+  max-width:min(420px, calc(100vw - 24px));
+}
+
+.event-tooltip::before {
+  top:auto;
+  bottom:-5px;
+  border-bottom:0;
+  border-top:5px solid var(--border);
+}
+
+#tooltip-meta {
+  max-width:380px;
+}
+
+@media (max-width:700px) {
+  #waveform {
+    height:104px;
+  }
+  #waveform-outer {
+    min-height:104px;
+  }
+  .event-tooltip {
+    min-width:190px;
+    max-width:calc(100vw - 20px);
+  }
+}
