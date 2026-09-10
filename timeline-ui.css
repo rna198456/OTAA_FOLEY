@@ -1,14 +1,12 @@
 /* ── Timeline UI refinements ──────────────────────────────────────────── */
 #waveform {
-  height:108px;
+  height:120px;
 }
 
 #waveform-outer {
-  min-height:108px;
+  min-height:120px;
 }
 
-/* The event menu belongs to the timeline, so keep it above the canvas
-   where it remains visible instead of falling below the panel. */
 .event-tooltip {
   z-index:50;
   max-width:min(420px, calc(100vw - 24px));
@@ -25,15 +23,50 @@
   max-width:380px;
 }
 
+#multi-selection-bar {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:5px 0 2px;
+  font-family:var(--mono);
+  font-size:8px;
+  color:var(--sub);
+}
+
+#multi-selection-bar.hidden { display:none; }
+
+#multi-selection-delete {
+  border:1px solid var(--border);
+  background:var(--surface2);
+  color:var(--sub);
+  border-radius:4px;
+  padding:4px 8px;
+  font-family:var(--mono);
+  font-size:8px;
+  cursor:pointer;
+}
+
+#multi-selection-delete:hover {
+  color:var(--red);
+  border-color:var(--red);
+}
+
 @media (max-width:700px) {
   #waveform {
-    height:104px;
+    height:120px;
   }
   #waveform-outer {
-    min-height:104px;
+    min-height:120px;
   }
   .event-tooltip {
     min-width:190px;
     max-width:calc(100vw - 20px);
+  }
+  #multi-selection-bar {
+    font-size:7px;
+  }
+  #multi-selection-delete {
+    font-size:7px;
   }
 }
