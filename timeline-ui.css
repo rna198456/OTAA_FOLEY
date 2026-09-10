@@ -10,6 +10,7 @@
 .event-tooltip {
   z-index:50;
   max-width:min(420px, calc(100vw - 24px));
+  transform:translateY(calc(-100% - 8px));
 }
 
 .event-tooltip::before {
