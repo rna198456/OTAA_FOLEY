@@ -2,14 +2,9 @@
  * mobile-fix.js
  *
  * Touch UX fix for the Foley library on smartphones.
- *
  * The original app uses pointerdown + preventDefault() on footwear and
- * surface buttons. That makes a vertical swipe inside the library behave
- * like a button press instead of a scroll gesture.
- *
- * This layer captures those pointerdown events before they reach the
- * original handlers, lets the browser keep its native vertical scrolling,
- * and only performs the selection when the gesture is a short tap.
+ * surface buttons. A vertical swipe can therefore be interpreted as a
+ * button press instead of a scroll gesture.
  */
 (function () {
   'use strict';
@@ -20,22 +15,34 @@
 
   if (!libraryScroll || !surfaceList || !fwGrid) return;
 
-  // Explicitly preserve native vertical scrolling in the library.
   libraryScroll.style.touchAction = 'pan-y';
   surfaceList.style.touchAction = 'pan-y';
   fwGrid.style.touchAction = 'pan-y';
 
   const state = new Map();
-  const TAP_SLOP = 10; // px allowed before a touch becomes a scroll gesture
+  const TAP_SLOP = 10;
+  let library = null;
+
+  function getLibrary() {
+    if (library) return Promise.resolve(library);
+    return fetch('library.json')
+      .then(response => {
+        if (!response.ok) throw new Error('No se pudo cargar library.json');
+        return response.json();
+      })
+      .then(data => {
+        library = data;
+        return data;
+      });
+  }
 
   function install(container, selector, action) {
     container.addEventListener('pointerdown', function (event) {
       const button = event.target.closest(selector);
       if (!button || !container.contains(button)) return;
 
-      // Stop the original target-level pointerdown handler in app.js.
-      // We deliberately do NOT call preventDefault(): vertical scrolling
-      // must remain a native browser gesture.
+      // Block app.js's original pointerdown handler, but keep the browser's
+      // native scrolling behavior by deliberately NOT calling preventDefault().
       event.stopPropagation();
 
       state.set(event.pointerId, {
@@ -60,15 +67,14 @@
       if (!info) return;
       state.delete(event.pointerId);
 
-      // A swipe is a scroll gesture, not a selection.
+      // A swipe is only a scroll gesture.
       if (info.moved) return;
 
-      // Only react if the same button is still under the pointer.
       const currentTarget = document.elementFromPoint(event.clientX, event.clientY);
       const currentButton = currentTarget && currentTarget.closest(selector);
       if (currentButton !== info.button) return;
 
-      action(buttonFromElement(info.button));
+      action(info.button);
     }, true);
 
     container.addEventListener('pointercancel', function (event) {
@@ -76,25 +82,21 @@
     }, true);
   }
 
-  function buttonFromElement(button) {
-    return button;
-  }
-
   install(surfaceList, '.surf-check', function (button) {
     if (typeof window.toggleSurface !== 'function') return;
     const id = button.dataset.surfId;
-    const surface = window.S && window.S.lib && Array.isArray(window.S.lib.surfaces)
-      ? window.S.lib.surfaces.find(s => s.id === id)
-      : null;
-    if (surface) window.toggleSurface(surface);
+    // toggleSurface only requires surf.id; app.js uses S.lib for the rest.
+    window.toggleSurface({ id });
   });
 
   install(fwGrid, '.fw-btn', function (button) {
     if (typeof window.selectFootwear !== 'function') return;
     const id = button.dataset.fwId;
-    const footwear = window.S && window.S.lib && Array.isArray(window.S.lib.footwear)
-      ? window.S.lib.footwear.find(f => f.id === id)
-      : null;
-    if (footwear) window.selectFootwear(footwear);
+    getLibrary()
+      .then(lib => {
+        const footwear = (lib.footwear || []).find(fw => fw.id === id);
+        if (footwear) window.selectFootwear(footwear);
+      })
+      .catch(() => {});
   });
 })();
