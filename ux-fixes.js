@@ -40,7 +40,7 @@
     if (z >= 100) return Math.round(z) + '×';
     if (z >= 10) return Math.round(z * 10) / 10 + '×';
     if (z >= 2) return Math.round(z * 10) / 10 + '×';
-    return (Math.round(z * 100) / 100) + '×';
+    return Math.round(z * 100) / 100 + '×';
   }
 
   function updateZoomUIFix() {
@@ -51,8 +51,6 @@
 
   // Keep the chosen focus time at the same relative pixel after zooming.
   function zoomAround(anchorTime, anchorRatio, nextZoom) {
-    const oldZoom = S.zoom;
-    const oldVis = visibleDuration();
     const safeAnchor = Math.max(0, Math.min(S.videoDuration || 0, anchorTime));
     const ratio = Math.max(0, Math.min(1, anchorRatio));
 
@@ -60,14 +58,11 @@
     const newVis = visibleDuration();
     S.scrollOffset = safeAnchor - ratio * newVis;
 
-    // Avoid jumps when zooming around a focus point outside the old visible area.
     if (!Number.isFinite(S.scrollOffset)) S.scrollOffset = 0;
     clampScrollFix();
     updateZoomUIFix();
     drawWaveform();
     updateScrollbar();
-
-    return { oldZoom, oldVis, newVis };
   }
 
   // Replace the original left-edge anchored zoom function.
@@ -76,7 +71,7 @@
     const focus = ev ? ev.time : video.currentTime;
     const vis = visibleDuration();
     const ratio = vis > 0 ? (focus - S.scrollOffset) / vis : 0.5;
-    zoomAround(focus, Math.max(0, Math.min(1, ratio)), nextZoom);
+    zoomAround(focus, ratio, nextZoom);
   };
 
   // Capture phase prevents the old zoom button handlers from also firing.
@@ -110,9 +105,10 @@
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const width = canvas.offsetWidth || 1;
-    const anchorTime = S.scrollOffset + (x / width) * visibleDuration();
+    const ratio = x / width;
+    const anchorTime = S.scrollOffset + ratio * visibleDuration();
     const nextZoom = S.zoom * (event.deltaY < 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR);
-    zoomAround(anchorTime, x / width, nextZoom);
+    zoomAround(anchorTime, ratio, nextZoom);
   }, { passive: false, capture: true });
 
   // Pinch zoom follows the midpoint between the two fingers.
@@ -124,7 +120,6 @@
     const a = event.touches[0];
     const b = event.touches[1];
     const mx = (a.clientX + b.clientX) / 2;
-    const my = (a.clientY + b.clientY) / 2;
     const rect = canvas.getBoundingClientRect();
     const ratio = (mx - rect.left) / (canvas.offsetWidth || 1);
     pinch = {
@@ -149,6 +144,21 @@
     if (event.touches.length < 2) pinch = null;
   }, { capture: true });
 
+  // ── Tooltip: keep the event menu above the timeline ────────────────────
+  if (tooltip && typeof positionTooltip === 'function') {
+    const originalPositionTooltip = positionTooltip;
+    positionTooltip = function () {
+      const result = originalPositionTooltip.apply(this, arguments);
+      const ev = S.events.find(e => e.id === S.selectedEvId);
+      if (!ev) return result;
+
+      const gap = 8;
+      const top = Math.max(4, canvas.offsetTop - tooltip.offsetHeight - gap);
+      tooltip.style.top = top + 'px';
+      return result;
+    };
+  }
+
   // ── Unified preview with event gain ────────────────────────────────────
   const originalStopPreview = stopPreview;
 
@@ -159,6 +169,7 @@
     S.previewTimers.forEach(clearTimeout);
     S.previewTimers = [];
 
+    // IMPORTANT: capture the current playhead; do not seek to zero.
     const startAt = video.currentTime;
     S.startTimecode = startAt;
     const ctx = AudioEngine.getCtx();
@@ -168,6 +179,7 @@
       S.previewTimers.push(setTimeout(() => {
         if (!S.isPreviewing) return;
 
+        // The event gain is part of the audible preview, not only the WAV export.
         const eventGain = ev.gain ?? 1;
         const layersWithEventGain = (ev.layers || []).map(layer => ({
           ...layer,
@@ -193,13 +205,12 @@
     startRaf();
   };
 
-  // Keep the original stop behavior but ensure UI follows the unified control.
   stopPreview = function () {
     originalStopPreview();
     playbackBtn.textContent = '▶ REPRODUCCIÓN';
   };
 
-  // ── Spacebar = unified playback (or trigger while recording) ────────────
+  // ── Spacebar = trigger while recording; playback afterwards ────────────
   document.addEventListener('keydown', event => {
     if (event.code !== 'Space' || event.repeat) return;
 
@@ -213,7 +224,8 @@
     if (isEditable) return;
 
     if (S.isRecording) {
-      if (!playbackBtn.disabled && !document.getElementById('btn-trigger').disabled) {
+      const triggerBtn = document.getElementById('btn-trigger');
+      if (triggerBtn && !triggerBtn.disabled) {
         event.preventDefault();
         event.stopImmediatePropagation();
         fireTrigger();
@@ -225,6 +237,7 @@
 
     event.preventDefault();
     event.stopImmediatePropagation();
+    // This goes through the same unified REPRODUCCIÓN path as the button.
     playbackBtn.click();
   }, true);
 
