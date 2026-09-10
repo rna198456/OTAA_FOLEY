@@ -24,17 +24,16 @@
   playbackBtn.textContent = '▶ REPRODUCCIÓN';
   playbackBtn.title = 'Reproducir / pausar video y Foley desde la posición actual';
 
-  let videoOnlyPlayback = false;
-
   function hasRecordedEvents() {
     return typeof S !== 'undefined' && Array.isArray(S.events) && S.events.length > 0;
   }
 
   function syncButton() {
     const hasVideo = !!video.src;
-    const blocked = typeof S !== 'undefined' && (S.isRecording || S.isPreviewing);
+    const recording = typeof S !== 'undefined' && S.isRecording;
 
-    playbackBtn.disabled = !hasVideo || blocked;
+    // Preview must remain clickable so the same control can pause it.
+    playbackBtn.disabled = !hasVideo || recording;
 
     if (typeof S !== 'undefined' && S.isPreviewing) {
       playbackBtn.textContent = '❚❚ PAUSAR';
@@ -48,18 +47,15 @@
   async function startUnifiedPlayback() {
     if (!video.src || (typeof S !== 'undefined' && S.isRecording)) return;
 
-    // With recorded events, use the application's existing preview engine.
-    // startPreview() already starts from video.currentTime and schedules only
-    // events at or after that position.
+    // Existing preview engine already uses video.currentTime as the start
+    // position and schedules only events at or after that position.
     if (hasRecordedEvents() && typeof startPreview === 'function') {
-      videoOnlyPlayback = false;
       await startPreview();
       syncButton();
       return;
     }
 
-    // No events: ordinary video playback for ENSAYO.
-    videoOnlyPlayback = true;
+    // No events: ordinary video playback for ENSAYO, also from current position.
     try {
       await video.play();
     } catch (err) {
@@ -71,16 +67,14 @@
   function stopUnifiedPlayback() {
     if (typeof S !== 'undefined' && S.isPreviewing && typeof stopPreview === 'function') {
       stopPreview();
-      videoOnlyPlayback = false;
     } else {
       video.pause();
-      videoOnlyPlayback = false;
     }
     syncButton();
   }
 
-  // Capture phase prevents app.js's old #btn-preview click handler from
-  // running as well. This makes REPRODUCCIÓN the single source of playback.
+  // Capture phase prevents the old app.js #btn-preview click handler from
+  // also running. REPRODUCCIÓN is therefore the single playback control.
   playbackBtn.addEventListener('click', event => {
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -94,22 +88,16 @@
     }
   }, true);
 
-  video.addEventListener('loadedmetadata', () => {
-    videoOnlyPlayback = false;
-    syncButton();
-  });
+  video.addEventListener('loadedmetadata', syncButton);
   video.addEventListener('play', syncButton);
   video.addEventListener('pause', syncButton);
   video.addEventListener('ended', () => {
-    videoOnlyPlayback = false;
     if (typeof S !== 'undefined' && S.isPreviewing && typeof stopPreview === 'function') {
       stopPreview();
     }
     syncButton();
   });
 
-  // Loading a new video clears the session in app.js, so the same button
-  // naturally returns to video-only ENSAYO playback.
   setInterval(syncButton, 250);
   syncButton();
 })();
