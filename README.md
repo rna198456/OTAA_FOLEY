@@ -2,318 +2,182 @@
 
 **Foley Recorder · Oficios y Técnicas de las Artes Audiovisuales · Cátedra Corti**
 
-OTAA_FOLEY es una herramienta web para **practicar, grabar y editar Foley sincronizado con video** desde el navegador.
+OTAA_FOLEY es una herramienta web para **practicar, grabar, revisar y editar Foley sincronizado con video** desde el navegador.
 
-La herramienta está pensada especialmente para el trabajo pedagógico: permite experimentar rápidamente con distintas combinaciones de **calzado + superficie**, reproducirlas mientras avanza una imagen y construir una sesión de eventos sonoros que luego puede revisarse, editarse y exportarse como WAV.
+Está pensada para el trabajo pedagógico: permite experimentar con combinaciones de **calzado + superficie**, registrar pasos sobre un video y editar después su posición, nivel y combinación antes de exportar un WAV.
 
 No requiere instalación ni dependencias externas. Funciona con JavaScript nativo y Web Audio API.
 
----
+## Flujo de trabajo
 
-## ¿Cómo funciona?
-
-El flujo básico es:
-
-**VIDEO → SELECCIÓN → ENSAYO → GRABACIÓN → REPRODUCCIÓN → EDICIÓN → WAV**
+**VIDEO → SELECCIÓN → GRABACIÓN → REPRODUCCIÓN → EDICIÓN → WAV**
 
 ### 1. Cargar un video
 
-Se puede cargar un archivo de video mediante el botón **+ Video** o seleccionándolo desde la zona de carga.
+Usá **+ Video** o la zona de carga. Una vez cargado, aparecen el video, el timecode y la timeline.
 
-Una vez cargado, la aplicación muestra el video, el timecode y la timeline.
+### 2. Seleccionar calzado y superficies
 
-### 2. Elegir el calzado
-
-En la biblioteca se selecciona un tipo de calzado, por ejemplo:
+La biblioteca incluye:
 
 - Botas
 - Zapatillas
 - Tacos
 - Descalzo
 
-La selección queda visible en el bloque **SELECCIÓN** para que la combinación activa siempre sea clara.
+Se pueden combinar una o más superficies y ajustar individualmente su nivel.
 
-### 3. Elegir una o más superficies
+### 3. Probar antes de grabar
 
-Las superficies funcionan como capas. Se puede seleccionar una sola o combinar varias, por ejemplo:
+**REPRODUCCIÓN** funciona aunque todavía no haya eventos grabados: reproduce y pausa el video desde la posición actual del playhead. Así se pueden probar las combinaciones con el botón grande de disparo sin crear eventos.
 
-**Botas + Agua + Hojas**
+### 4. Grabar Foley
 
-Cada superficie tiene un fader individual de nivel. Esto permite construir una combinación de Foley con diferentes proporciones de textura y presencia.
+Al pulsar **GRABAR**, el video comienza desde la posición actual. Cada disparo crea una instrucción en la timeline.
 
-La selección activa también se refleja en el botón principal de disparo.
-
-### 4. Modo ENSAYO
-
-**ENSAYO** permite probar las combinaciones sin crear eventos en la timeline.
-
-El botón **▶ REPRODUCCIÓN** permite reproducir y pausar el video desde la posición actual del playhead. Mientras el video avanza, los botones de calzado y superficie pueden dispararse libremente para probar sonidos sin registrarlos.
-
-Es útil para:
-
-- encontrar una combinación adecuada;
-- probar niveles de superficie;
-- familiarizarse con la relación entre imagen y sonido;
-- preparar la interpretación antes de grabar.
-
-### 5. Modo GRABACIÓN
-
-En **GRABACIÓN**, cada disparo realizado mientras avanza el video genera un evento en la timeline.
-
-También se puede utilizar la tecla **Espacio** para disparar la combinación seleccionada.
+La tecla **Espacio** se utiliza exclusivamente durante la grabación para disparar la combinación seleccionada.
 
 Cada evento conserva:
 
 - posición temporal;
-- combinación de calzado y superficies;
-- nivel general del evento;
-- nivel individual de cada capa;
-- sample utilizado en cada capa.
+- calzado;
+- superficies;
+- nivel general;
+- nivel de cada superficie;
+- sample/paso utilizado en cada capa.
 
-### 6. REPRODUCCIÓN
+### 5. REPRODUCCIÓN
 
-La herramienta utiliza un único control **▶ REPRODUCCIÓN** para evitar duplicar funciones.
+**REPRODUCCIÓN** es el único control de transporte.
 
-- Si no existen eventos grabados, reproduce y pausa únicamente el video, permitiendo trabajar en modo ENSAYO.
-- Si existen eventos grabados, reproduce y pausa el video junto con el Foley registrado.
-- La reproducción comienza siempre desde la **posición actual del playhead / timeline**.
-- Al detener la reproducción, la posición alcanzada queda conservada.
+- Sin eventos: reproduce y pausa únicamente el video.
+- Con eventos: reproduce y pausa video + Foley.
+- Comienza siempre desde la posición actual del playhead.
+- Detener conserva la posición alcanzada.
 
-Esto permite desplazarse a cualquier punto del video, reproducir desde allí y revisar tanto la imagen como el Foley correspondiente.
+## Timeline
 
-### 7. Timeline
+La timeline permite revisar y corregir la interpretación.
 
-La timeline muestra los eventos registrados y el playhead del video.
+### Selección individual y edición
 
-Incluye:
+Un **click sobre un evento** lo selecciona y abre su menú.
 
-- zoom;
-- navegación temporal;
-- selección de eventos;
-- movimiento horizontal de eventos para corregir sincronía;
-- modificación vertical del nivel del evento;
-- información del playhead;
-- cantidad de eventos;
-- información detallada del evento seleccionado.
+Un **click sostenido y arrastre** sobre el evento permite editarlo directamente:
 
-Al seleccionar un evento se muestra información adicional sobre sus capas y niveles.
+- arrastre horizontal → cambia la posición temporal;
+- arrastre vertical → cambia el volumen general del evento.
 
-El nivel general se presenta tanto como porcentaje como en dB aproximados.
+La dirección inicial del movimiento determina el parámetro que se edita.
 
-### 8. Undo / Redo
+El volumen también puede modificarse desde el fader del menú del evento.
 
-La timeline dispone de **↶ Deshacer** y **↷ Rehacer**.
+### Selección múltiple
 
-También funcionan los atajos:
+Arrastrando sobre una **zona vacía de la timeline** se crea una selección temporal. Todos los eventos incluidos en ese rango quedan resaltados para que sea evidente cuáles están seleccionados.
+
+Cuando existe una selección aparece **BORRAR SELECCIÓN**. También se puede usar **Supr** o **Backspace** para borrar las instrucciones seleccionadas.
+
+### Cambio de combinación / sample
+
+El botón **⇄** del menú del evento abre el editor de combinación.
+
+Desde allí se puede cambiar:
+
+- calzado;
+- superficies;
+- nivel de cada superficie;
+- paso/sample exacto de cada capa.
+
+El evento conserva su **posición temporal, identidad y nivel general** al aplicar los cambios.
+
+### Zoom
+
+La timeline tiene zoom progresivo hasta **128×**.
+
+Los botones de zoom mantienen enfocada la posición del evento seleccionado o, en su defecto, el playhead. El zoom con rueda sigue la posición del cursor.
+
+### Undo / Redo
 
 - **Ctrl/Cmd + Z** → deshacer
 - **Ctrl/Cmd + Shift + Z** → rehacer
 - **Ctrl/Cmd + Y** → rehacer
 
-El historial contempla las principales modificaciones de la sesión, entre ellas:
+El historial cubre las principales operaciones de edición de la sesión.
 
-- creación de eventos;
-- eliminación de eventos;
-- movimiento temporal;
-- cambios de ganancia;
-- cambios de combinación de un evento;
-- operaciones de Punch-in.
+### Punch-in
 
-El historial pertenece a la sesión actual y se reinicia al cargar un video nuevo.
-
-### 9. Punch-in
-
-**PUNCH-IN** permite volver a trabajar únicamente sobre una parte de la sesión.
-
-Se define un punto **IN** y un punto **OUT**, en segundos, y luego se utiliza **GRABAR**.
-
-El comportamiento es de reemplazo del segmento: los eventos que se encuentren dentro del rango indicado se eliminan y pueden volver a grabarse.
-
-Los botones **←** permiten tomar rápidamente la posición actual del video como IN u OUT.
-
-Por ejemplo:
-
-**IN 12.50 s → OUT 18.00 s**
-
-Esto permite corregir una sección sin tener que reconstruir toda la sesión.
-
----
-
-## Selección aleatoria de samples
-
-Cada combinación de **calzado + superficie** dispone de varios samples.
-
-El motor realiza una **selección aleatoria sin repetición inmediata**, evitando que el mismo archivo se reproduzca dos veces consecutivas dentro de una misma combinación.
-
-El sample utilizado queda registrado en el evento. De esta manera, la reproducción y el render final pueden reproducir exactamente la misma elección.
-
----
+**PUNCH-IN** permite reemplazar solamente una parte de la sesión definiendo **IN** y **OUT** en segundos.
 
 ## Motor de audio
 
-El audio está gestionado mediante **Web Audio API**.
+El audio se gestiona mediante **Web Audio API**.
 
 El sistema:
 
 - carga y decodifica los WAV;
 - mantiene los samples en caché;
-- reproduce las capas en tiempo real;
-- permite niveles individuales por superficie;
-- conserva el sample usado en cada evento;
-- realiza un render offline para la exportación.
+- reproduce capas en tiempo real;
+- conserva el sample usado por cada evento;
+- renderiza offline para exportación.
 
-Si un sample no puede cargarse, la herramienta dispone de un **fallback sintético procedural**, de modo que una combinación no queda completamente inutilizada por la ausencia de un WAV.
-
----
+Si un WAV no puede cargarse, existe un fallback sintético procedural.
 
 ## Exportación WAV
 
-**↓ WAV** genera un render offline del proyecto completo.
+La exportación genera un **WAV estéreo PCM de 48 kHz / 24 bits**.
 
-La exportación actual es:
+Los archivos se numeran consecutivamente y se descargan con nombres como:
 
-- **48 kHz**
-- **PCM 16-bit**
-- **Stereo WAV**
+`Foley Recorder OTAA 1.wav`
 
-El archivo final se genera a partir de los eventos registrados y sus parámetros, en lugar de depender de la reproducción en tiempo real.
+`Foley Recorder OTAA 2.wav`
 
----
+`Foley Recorder OTAA 3.wav`
+
+La numeración se conserva en el navegador mediante almacenamiento local.
 
 ## Uso en smartphones
 
-La interfaz incluye un diseño específico para pantallas pequeñas.
+La interfaz es responsive y la biblioteca dispone de desplazamiento táctil. Los gestos de swipe en la biblioteca no deberían activar accidentalmente los botones.
 
-En móvil:
-
-- la biblioteca ocupa el área disponible debajo del video y la timeline;
-- las superficies y faders tienen objetivos táctiles mayores;
-- la biblioteca dispone de desplazamiento vertical;
-- los gestos de swipe no deberían activar accidentalmente botones;
-- la timeline permite zoom mediante botones y pinch.
-
-La separación entre **tap** y **swipe** es gestionada por una capa específica de interacción táctil.
-
----
+La timeline utiliza interacción mediante pointer events para unificar mouse y touch.
 
 ## Estructura de archivos
 
 ```text
 OTAA_FOLEY/
-├── index.html            ← interfaz principal
-├── style.css             ← estilos generales y responsive
-├── credits.css           ← crédito del creador
-├── enhancements.css      ← estilos de las funciones añadidas
-├── app.js                ← interfaz, grabación, timeline y edición
-├── audio.js              ← motor Web Audio y render WAV
-├── mobile-fix.js         ← comportamiento táctil de la biblioteca
-├── enhancements.js       ← selección, timeline, modos, historial y Punch-in
-├── workflow-guard.js     ← protecciones de flujo entre modos
-├── rehearsal-playback.js ← control unificado de reproducción
-├── library.json          ← biblioteca de calzado, superficies y samples
-├── README.md             ← documentación
-└── samples/              ← archivos WAV de la biblioteca
+├── index.html
+├── style.css
+├── credits.css
+├── enhancements.css
+├── timeline-ui.css
+├── app.js
+├── audio.js
+├── mobile-fix.js
+├── enhancements.js
+├── workflow-guard.js
+├── rehearsal-playback.js
+├── final-fixes.js
+├── interaction-polish.js
+├── library.json
+├── README.md
+└── samples/
 ```
 
----
+`workflow-guard.js` y `rehearsal-playback.js` se conservan en el repositorio por compatibilidad histórica, pero ya no participan del flujo cargado por `index.html`.
 
-## Cómo agregar o reemplazar samples
+## Funciones pendientes
 
-La biblioteca se define en `library.json`.
+Se mantienen fuera de esta versión las funciones más cercanas a un DAW, entre ellas:
 
-Cada superficie declara sus archivos de audio, por ejemplo:
-
-```json
-{
-  "id": "madera",
-  "label": "Madera",
-  "emoji": "🪵",
-  "color": "#8B5E3C",
-  "samples": [
-    { "file": "samples/{{fw}}/madera-001.wav", "label": "Paso 1" },
-    { "file": "samples/{{fw}}/madera-002.wav", "label": "Paso 2" },
-    { "file": "samples/{{fw}}/madera-003.wav", "label": "Paso 3" }
-  ]
-}
-```
-
-`{{fw}}` se reemplaza automáticamente por el identificador del calzado seleccionado.
-
----
-
-## Flujo pedagógico sugerido
-
-Una forma de trabajar la herramienta en clase es:
-
-**1. Ensayo**
-
-Explorar diferentes combinaciones de calzado y superficies mientras el video se reproduce desde la posición deseada, sin registrar eventos.
-
-**2. Grabación**
-
-Elegir una combinación y ejecutar el Foley siguiendo la imagen.
-
-**3. Reproducción**
-
-Usar **REPRODUCCIÓN** desde distintas posiciones del timeline para revisar la relación entre imagen y Foley.
-
-**4. Edición**
-
-Mover eventos, corregir niveles, cambiar combinaciones y utilizar Undo/Redo cuando sea necesario.
-
-**5. Corrección localizada**
-
-Utilizar Punch-in para volver a grabar un fragmento específico.
-
-**6. Exportación**
-
-Generar el WAV final para continuar el trabajo en un DAW.
-
----
-
-## Funciones actuales
-
-- ✅ Carga de video local
-- ✅ Biblioteca de calzado
-- ✅ Selección múltiple de superficies
-- ✅ Fader individual por superficie
-- ✅ Selección aleatoria sin repetición inmediata
-- ✅ Disparo en tiempo real
-- ✅ Tecla Espacio para disparar durante la grabación
-- ✅ Modo **Ensayo**
-- ✅ Modo **Grabación**
-- ✅ **Reproducción unificada** de video y Foley
-- ✅ Reproducción desde la posición actual del timeline
-- ✅ Timeline con zoom y navegación
-- ✅ Edición temporal de eventos
-- ✅ Edición de ganancia por evento
-- ✅ Información ampliada del evento seleccionado
-- ✅ Cambio de combinación de un evento
-- ✅ Undo / Redo
-- ✅ Punch-in por rango IN / OUT
-- ✅ Render offline
-- ✅ Exportación WAV 48 kHz / 16-bit stereo
-- ✅ Interfaz responsive desktop / mobile
-- ✅ Manejo táctil para evitar activaciones accidentales durante el scroll
-- ✅ Fallback sintético cuando no está disponible un sample
-- ✅ Crédito integrado: “Diseñado y creado por Ramiro N. Alvarez · con herramientas de IA.”
-
----
-
-## Funciones pendientes / posibles futuras versiones
-
-Estas funciones quedan deliberadamente fuera de esta versión para mantener la herramienta enfocada y simple:
-
-- exportación directa de una sesión compatible con Reaper;
+- exportación directa de sesión para Reaper;
 - waveform del audio original del video;
-- múltiples tracks o categorías de capas;
+- múltiples tracks;
 - perspectiva / distancia sonora;
-- presets de combinaciones Foley;
-- microvariaciones temporales entre capas;
-- optimización avanzada de precarga de samples;
-- otras funciones de edición más cercanas a un DAW.
-
----
+- presets;
+- microvariaciones temporales;
+- optimizaciones avanzadas de precarga.
 
 ## Deploy en GitHub Pages
 
@@ -321,12 +185,6 @@ En GitHub:
 
 **Settings → Pages → Source: `main / (root)`**
 
-La aplicación puede utilizarse directamente desde la URL de GitHub Pages del repositorio.
-
----
-
 ## Autoría
 
 **Diseñado y creado por Ramiro N. Alvarez · con herramientas de IA.**
-
-OTAA_FOLEY forma parte del trabajo de desarrollo de herramientas y recursos para la enseñanza de sonido audiovisual.
