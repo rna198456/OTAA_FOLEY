@@ -37,35 +37,40 @@
   }
 
   // ── Incremental recording ─────────────────────────────────────────────
-  // app.js historically cleared S.events and the session log in startRecording().
-  // Override it here with the same recording behavior, but preserve the events
-  // already recorded for the current video.
-  if (btnRecord && btnStop && typeof startRecording === 'function') {
-    startRecording = function () {
-      if (!S.videoLoaded || S.isRecording) return;
+  // app.js registers its own click listener before this file loads. A later
+  // reassignment of startRecording would not replace that already-registered
+  // callback, so capture the button click here and stop the old callback first.
+  function startIncrementalRecording() {
+    if (!S.videoLoaded || S.isRecording) return;
 
-      AudioEngine.getCtx();
-      S.startTimecode = video.currentTime;
-      S.isRecording = true;
+    AudioEngine.getCtx();
+    S.startTimecode = video.currentTime;
+    S.isRecording = true;
 
-      // IMPORTANT: do NOT clear S.events or the session log here.
-      // A second/third pass adds new events to the existing timeline.
-      btnRecord.style.display = 'none';
-      btnStop.style.display = 'inline-block';
-      btnStop.disabled = false;
-      playbackBtn.disabled = true;
+    // IMPORTANT: preserve S.events and the existing session log.
+    btnRecord.style.display = 'none';
+    btnStop.style.display = 'inline-block';
+    btnStop.disabled = false;
+    playbackBtn.disabled = true;
+    recIndicator?.classList.remove('hidden');
+    if (hintBar) hintBar.classList.remove('hidden');
 
-      recIndicator?.classList.remove('hidden');
-      if (hintBar) hintBar.classList.remove('hidden');
-      if (typeof updateEventCount === 'function') updateEventCount();
-      if (typeof updateHint === 'function') updateHint();
-      if (typeof hideTooltip === 'function') hideTooltip();
-      if (typeof drawWaveform === 'function') drawWaveform();
-      if (typeof startRaf === 'function') startRaf();
+    if (typeof updateEventCount === 'function') updateEventCount();
+    if (typeof updateHint === 'function') updateHint();
+    if (typeof hideTooltip === 'function') hideTooltip();
+    if (typeof drawWaveform === 'function') drawWaveform();
+    if (typeof startRaf === 'function') startRaf();
 
-      const p = video.play();
-      if (p && typeof p.catch === 'function') p.catch(err => console.warn('[record]', err));
-    };
+    const p = video.play();
+    if (p && typeof p.catch === 'function') p.catch(err => console.warn('[record]', err));
+  }
+
+  if (btnRecord) {
+    btnRecord.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      startIncrementalRecording();
+    }, true);
   }
 
   // Keep the transport usable after every recording pass.
@@ -124,8 +129,7 @@
 
   // ── Space = playback transport ────────────────────────────────────────
   // Capture at window level so keyboard focus never has to be placed on the
-  // button first. During recording, final-fixes.js keeps Space as the Foley
-  // trigger instead.
+  // button first. During recording final-fixes.js owns Space as Foley trigger.
   window.addEventListener('keydown', event => {
     if (event.code !== 'Space' || event.repeat) return;
     const target = event.target;
