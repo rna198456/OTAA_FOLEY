@@ -5,7 +5,8 @@
  *   consolidated pointer-event timeline interaction.
  * - Extends the event combination menu so each active surface can choose
  *   the exact recorded sample/step (rrIdx).
- * - Keeps REPRODUCCIÓN available as soon as a video is loaded.
+ * - Keeps REPRODUCCIÓN available as soon as a video is loaded and after
+ *   recording stops, even when no Foley events were recorded.
  * - Allows a simple tap/click on an empty timeline area to seek the video.
  * - Reuses the existing ✕ button as a close button for the event popup.
  */
@@ -49,6 +50,17 @@
     video?.addEventListener(type, enablePlaybackForLoadedVideo);
   });
   enablePlaybackForLoadedVideo();
+
+  // app.js disables REPRODUCCIÓN after stopping a recording with zero events.
+  // Keep the transport available because it now controls video playback itself.
+  if (typeof stopRecording === 'function' && playbackBtn) {
+    const originalStopRecording = stopRecording;
+    stopRecording = function (...args) {
+      const result = originalStopRecording.apply(this, args);
+      if (S.videoLoaded && !S.isRecording) playbackBtn.disabled = false;
+      return result;
+    };
+  }
 
   // ── Reliable seek on an empty timeline tap ──────────────────────────────
   // Pointer Events on the canvas call preventDefault(), so relying on the
