@@ -5,6 +5,8 @@
  * - Preloads every WAV needed by the current event set after timeline edits.
  * - Makes Space a reliable PLAY/STOP transport without requiring a prior click.
  * - During recording, Space remains the Foley trigger handled by final-fixes.js.
+ * - Recording is incremental: starting a new recording pass preserves all
+ *   previously recorded events in the same video/session.
  */
 'use strict';
 
@@ -13,6 +15,11 @@
 
   const video = document.getElementById('video-el');
   const playbackBtn = document.getElementById('btn-preview');
+  const btnRecord = document.getElementById('btn-record');
+  const btnStop = document.getElementById('btn-stop');
+  const recIndicator = document.getElementById('rec-indicator');
+  const hintBar = document.getElementById('hint-bar');
+
   if (!video || !playbackBtn) return;
 
   function normalizeEvents() {
@@ -29,9 +36,49 @@
     });
   }
 
-  // Wrap the consolidated preview once. The first play from Space therefore
-  // has exactly the same preparation as the button, instead of depending on
-  // a previous mouse click to initialize/cache the selected Foley WAVs.
+  // ── Incremental recording ─────────────────────────────────────────────
+  // app.js historically cleared S.events and the session log in startRecording().
+  // Override it here with the same recording behavior, but preserve the events
+  // already recorded for the current video.
+  if (btnRecord && btnStop && typeof startRecording === 'function') {
+    startRecording = function () {
+      if (!S.videoLoaded || S.isRecording) return;
+
+      AudioEngine.getCtx();
+      S.startTimecode = video.currentTime;
+      S.isRecording = true;
+
+      // IMPORTANT: do NOT clear S.events or the session log here.
+      // A second/third pass adds new events to the existing timeline.
+      btnRecord.style.display = 'none';
+      btnStop.style.display = 'inline-block';
+      btnStop.disabled = false;
+      playbackBtn.disabled = true;
+
+      recIndicator?.classList.remove('hidden');
+      if (hintBar) hintBar.classList.remove('hidden');
+      if (typeof updateEventCount === 'function') updateEventCount();
+      if (typeof updateHint === 'function') updateHint();
+      if (typeof hideTooltip === 'function') hideTooltip();
+      if (typeof drawWaveform === 'function') drawWaveform();
+      if (typeof startRaf === 'function') startRaf();
+
+      const p = video.play();
+      if (p && typeof p.catch === 'function') p.catch(err => console.warn('[record]', err));
+    };
+  }
+
+  // Keep the transport usable after every recording pass.
+  if (typeof stopRecording === 'function' && playbackBtn) {
+    const originalStopRecording = stopRecording;
+    stopRecording = function (...args) {
+      const result = originalStopRecording.apply(this, args);
+      if (S.videoLoaded && !S.isRecording) playbackBtn.disabled = false;
+      return result;
+    };
+  }
+
+  // ── Preview preparation ────────────────────────────────────────────────
   const originalStartPreview = window.startPreview;
   const originalStopPreview = window.stopPreview;
   let preparing = false;
@@ -75,13 +122,15 @@
     };
   }
 
-  // Window capture runs before document-level shortcuts. It guarantees that
-  // Space reaches the transport even when focus was never placed on the button.
+  // ── Space = playback transport ────────────────────────────────────────
+  // Capture at window level so keyboard focus never has to be placed on the
+  // button first. During recording, final-fixes.js keeps Space as the Foley
+  // trigger instead.
   window.addEventListener('keydown', event => {
     if (event.code !== 'Space' || event.repeat) return;
     const target = event.target;
     if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
-    if (S.isRecording) return; // final-fixes owns Space during recording
+    if (S.isRecording) return;
     if (!S.videoLoaded || typeof window.startPreview !== 'function') return;
 
     event.preventDefault();
@@ -94,7 +143,5 @@
     }
   }, true);
 
-  // Normalize immediately after the file/state has changed as an additional
-  // guard for old sessions containing stale surface objects.
   normalizeEvents();
 })();
