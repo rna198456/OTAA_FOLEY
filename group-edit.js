@@ -39,8 +39,13 @@
   ].join(';');
   bar.innerHTML = `
     <span id="group-edit-label"></span>
-    <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
-      <button id="group-edit-volume" type="button" style="border:1px solid var(--border);background:transparent;color:var(--sub);border-radius:4px;padding:5px 8px;font:600 8px var(--mono);cursor:pointer">VOLUMEN GRUPO</button>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <div id="group-edit-volume-wrap" style="display:flex;align-items:center;gap:5px;min-width:190px">
+        <span style="color:var(--sub);white-space:nowrap">VOL.</span>
+        <input id="group-edit-volume-slider" type="range" min="0" max="200" step="1" value="100"
+          aria-label="Volumen del grupo" style="width:130px;cursor:pointer;accent-color:var(--amber)" />
+        <span id="group-edit-volume-value" style="min-width:44px;text-align:right;color:var(--amber);font-weight:600">100% · 0 dB</span>
+      </div>
       <button id="group-edit-change" type="button" style="border:1px solid var(--amber);background:rgba(212,135,10,.08);color:var(--amber);border-radius:4px;padding:5px 8px;font:600 8px var(--mono);cursor:pointer">CAMBIAR GRUPO</button>
       <button id="group-edit-clear" type="button" style="border:1px solid var(--border);background:transparent;color:var(--sub);border-radius:4px;padding:5px 7px;font:600 8px var(--mono);cursor:pointer">LIMPIAR</button>
     </div>`;
@@ -48,8 +53,9 @@
 
   const label = bar.querySelector('#group-edit-label');
   const changeBtn = bar.querySelector('#group-edit-change');
-  const volumeBtn = bar.querySelector('#group-edit-volume');
   const clearBtn = bar.querySelector('#group-edit-clear');
+  const volumeSlider = bar.querySelector('#group-edit-volume-slider');
+  const volumeValue = bar.querySelector('#group-edit-volume-value');
 
   function redraw() {
     if (typeof drawWaveform === 'function') drawWaveform();
@@ -60,7 +66,56 @@
     const n = groupSelection.size;
     bar.style.display = n ? 'flex' : 'none';
     label.textContent = n ? `${n} INSTRUCCIÓN${n === 1 ? '' : 'ES'} SELECCIONADA${n === 1 ? '' : 'S'}` : '';
+    if (n) syncGroupVolumeUI();
   }
+
+  function selectedTargets() {
+    return S.events.filter(ev => groupSelection.has(ev.id));
+  }
+
+  function groupAverageGain(targets = selectedTargets()) {
+    if (!targets.length) return 1;
+    return targets.reduce((sum, ev) => sum + (ev.gain ?? 1), 0) / targets.length;
+  }
+
+  function gainToDb(gain) {
+    if (gain <= 0) return '-∞ dB';
+    const db = 20 * Math.log10(gain);
+    return `${db >= 0 ? '+' : ''}${db.toFixed(1)} dB`;
+  }
+
+  function syncGroupVolumeUI() {
+    const targets = selectedTargets();
+    if (!targets.length) return;
+    const avg = Math.max(0, Math.min(2, groupAverageGain(targets)));
+    volumeSlider.value = String(Math.round(avg * 100));
+    volumeValue.textContent = `${Math.round(avg * 100)}% · ${gainToDb(avg)}`;
+  }
+
+  function applyGroupVolume() {
+    const targets = selectedTargets();
+    if (!targets.length) return;
+
+    const initialAverage = groupAverageGain(targets);
+    const requestedAverage = Number(volumeSlider.value) / 100;
+    const delta = requestedAverage - initialAverage;
+
+    targets.forEach(ev => {
+      ev.gain = Math.max(0, Math.min(2, (ev.gain ?? 1) + delta));
+    });
+
+    const actualAverage = groupAverageGain(targets);
+    volumeSlider.value = String(Math.round(actualAverage * 100));
+    volumeValue.textContent = `${Math.round(actualAverage * 100)}% · ${gainToDb(actualAverage)}`;
+    if (typeof rebuildLog === 'function') rebuildLog();
+    if (typeof updateEventCount === 'function') updateEventCount();
+    if (typeof hideTooltip === 'function') hideTooltip();
+    redraw();
+  }
+
+  volumeSlider.addEventListener('input', () => {
+    applyGroupVolume();
+  });
 
   function selectRange(a, b) {
     const t1 = xToTime(Math.min(a, b));
@@ -125,64 +180,6 @@
     if (typeof hideTooltip === 'function') hideTooltip();
     redraw();
   }, true);
-
-  function openVolumeModal() {
-    const targets = S.events.filter(ev => groupSelection.has(ev.id));
-    if (!targets.length) return;
-
-    const title = document.querySelector('#modal-box .modal-title');
-    if (title) title.textContent = 'Volumen del grupo';
-    content.innerHTML = '';
-
-    const info = document.createElement('p');
-    info.style.cssText = 'font-size:11px;color:var(--sub);margin-bottom:12px;font-family:var(--mono)';
-    info.textContent = `Ajuste conjunto de ${targets.length} instrucciones. Se conserva la diferencia de volumen entre ellas.`;
-    content.appendChild(info);
-
-    const initialAverage = targets.reduce((sum, ev) => sum + (ev.gain ?? 1), 0) / targets.length;
-
-    const value = document.createElement('div');
-    value.style.cssText = 'text-align:center;font:600 12px var(--mono);color:var(--amber);margin:8px 0 10px';
-    value.textContent = `${Math.round(initialAverage * 100)}%`;
-
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = '0'; slider.max = '200'; slider.step = '1';
-    slider.value = String(Math.round(initialAverage * 100));
-    slider.style.cssText = 'width:100%;height:5px;accent-color:var(--amber);cursor:pointer';
-
-    const initialGains = new Map(targets.map(ev => [ev.id, ev.gain ?? 1]));
-    slider.addEventListener('input', () => {
-      const requestedAverage = Number(slider.value) / 100;
-      const delta = requestedAverage - initialAverage;
-      targets.forEach(ev => {
-        const base = initialGains.get(ev.id) ?? 1;
-        ev.gain = Math.max(0, Math.min(2, base + delta));
-      });
-      value.textContent = `${Math.round(requestedAverage * 100)}%`;
-      if (typeof rebuildLog === 'function') rebuildLog();
-      redraw();
-    });
-
-    const helper = document.createElement('div');
-    helper.style.cssText = 'font:8px var(--mono);color:var(--dark);margin-top:8px;text-align:center';
-    helper.textContent = 'Todos suben o bajan la misma cantidad.';
-    content.appendChild(value);
-    content.appendChild(slider);
-    content.appendChild(helper);
-
-    const done = document.createElement('button');
-    done.className = 'btn btn-amber btn-sm';
-    done.style.cssText = 'width:100%;margin-top:14px';
-    done.textContent = 'LISTO';
-    done.addEventListener('click', e => {
-      e.preventDefault(); e.stopImmediatePropagation();
-      overlay.classList.add('hidden');
-      if (title) title.textContent = 'Cambiar combinación del evento';
-    });
-    content.appendChild(done);
-    overlay.classList.remove('hidden');
-  }
 
   function openGroupModal() {
     const targets = S.events.filter(ev => groupSelection.has(ev.id));
@@ -316,11 +313,6 @@
   changeBtn.addEventListener('click', e => {
     e.preventDefault(); e.stopImmediatePropagation();
     openGroupModal();
-  }, true);
-
-  volumeBtn.addEventListener('click', e => {
-    e.preventDefault(); e.stopImmediatePropagation();
-    openVolumeModal();
   }, true);
 
   updateBar();
