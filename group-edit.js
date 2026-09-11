@@ -65,8 +65,14 @@
     const hit = S.events.some(ev => Math.abs(timeToX(ev.time) - x) <= 14);
     if (hit) {
       selectGesture = null;
+      groupSelection.clear();
+      updateBar();
       return;
     }
+    // Any new gesture in free space starts a fresh selection. A plain tap is
+    // still used by the timeline as a seek operation, not as a selection.
+    groupSelection.clear();
+    updateBar();
     selectGesture = { x, y, pointerId: e.pointerId, currentX: x, moved: false };
   }, true);
 
