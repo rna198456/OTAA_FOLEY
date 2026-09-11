@@ -57,10 +57,9 @@
 
     choosingDirectory = true;
     try {
-      const handle = await window.showDirectoryPicker({
-        mode: 'readwrite',
-        startIn: 'downloads'
-      });
+      // Keep the picker call as the first async operation. This preserves the
+      // browser's user-gesture requirement and avoids relying on startIn support.
+      const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
       exportDirectoryHandle = handle;
       updateFolderUI();
       setExportStatus(`📁 ${handle.name}`, true);
@@ -89,18 +88,19 @@
     if (!exportDirectoryHandle) return false;
 
     try {
-      const permission = await exportDirectoryHandle.queryPermission({ mode: 'readwrite' });
-      if (permission === 'prompt') {
-        const requested = await exportDirectoryHandle.requestPermission({ mode: 'readwrite' });
-        if (requested !== 'granted') return false;
-      } else if (permission !== 'granted') {
-        return false;
+      let permission = await exportDirectoryHandle.queryPermission({ mode: 'readwrite' });
+      if (permission !== 'granted') {
+        permission = await exportDirectoryHandle.requestPermission({ mode: 'readwrite' });
       }
+      if (permission !== 'granted') return false;
 
       const fileHandle = await exportDirectoryHandle.getFileHandle(filename, { create: true });
       const writable = await fileHandle.createWritable();
-      await writable.write(blob);
-      await writable.close();
+      try {
+        await writable.write(blob);
+      } finally {
+        await writable.close();
+      }
       return true;
     } catch (error) {
       console.warn('HUELLA: no se pudo escribir el WAV en la carpeta elegida.', error);
@@ -217,10 +217,10 @@
     updateFolderUI();
   }
 
-  // ── WAV export — capture the button before app.js ──────────────────────
-  // app.js has a legacy export listener registered earlier. This capture-phase
-  // listener stops it and performs the complete export using the filename
-  // currently visible in the editable field.
+  // ── WAV export ─────────────────────────────────────────────────────────
+  // A capture-phase listener takes exclusive control of the button and stops
+  // the legacy exporter in app.js. This is deliberately kept here because
+  // branding.js is the last script loaded by index.html.
   if (btnExport) {
     btnExport.addEventListener('click', async event => {
       event.preventDefault();
@@ -230,11 +230,9 @@
 
       btnExport.disabled = true;
       const filename = getFilename();
-      setExportStatus('Renderizando 48 kHz…');
+      setExportStatus(`Renderizando 48 kHz · ${filename}`);
 
       try {
-        // First export: choose destination before rendering, so the user's
-        // gesture remains attached to the directory picker permission request.
         await ensureExportDirectory();
 
         const blob = await AudioEngine.renderToWav(S.events, S.videoDuration, 48000);
@@ -248,7 +246,6 @@
           setExportStatus('No se pudo guardar en la carpeta · descarga del navegador');
         }
 
-        // Fallback for unsupported browsers or cancelled/failed directory access.
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
