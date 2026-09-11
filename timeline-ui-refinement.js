@@ -13,15 +13,22 @@
   const tooltip = document.getElementById('event-tooltip');
   const tooltipVol = document.getElementById('tooltip-vol');
   const timeline = document.getElementById('waveform');
-  if (!panel || !progress || !timeline) return;
+  const outer = document.getElementById('waveform-outer');
+  if (!panel || !progress || !timeline || !outer) return;
 
-  // Compact the waveform without changing its interaction model.
+  // Compact visual footprint. The old waveform-outer padding-bottom existed
+  // for the floating tooltip and now only creates an empty black band.
   const style = document.createElement('style');
   style.id = 'huella-timeline-refinement-style';
   style.textContent = `
-    #waveform { height: 96px !important; }
-    #waveform-outer { margin-bottom: 0; }
-    #timeline-panel { gap: 4px; padding-top: 6px; padding-bottom: 7px; }
+    #waveform { height:78px !important; }
+    #waveform-outer {
+      min-height:78px !important;
+      height:auto !important;
+      padding-bottom:0 !important;
+      margin-bottom:0 !important;
+    }
+    #timeline-panel { gap:4px; padding-top:5px; padding-bottom:6px; }
     #event-edit-bar {
       display:none;
       align-items:center;
@@ -89,7 +96,8 @@
     #event-tooltip { display:none !important; }
 
     @media(max-width:700px){
-      #waveform { height:78px !important; }
+      #waveform { height:64px !important; }
+      #waveform-outer { min-height:64px !important; }
       #event-edit-bar { align-items:flex-start; }
       #event-edit-bar .event-edit-tools { width:100%; margin-left:0; }
       #event-edit-bar .event-edit-volume { flex:1; min-width:0; }
