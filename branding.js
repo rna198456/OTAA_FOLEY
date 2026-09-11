@@ -32,6 +32,47 @@
     filenameInput.addEventListener('focus', event => event.target.select());
     updateFilenameHint();
 
+    const style = document.createElement('style');
+    style.id = 'huella-wav-filename-style';
+    style.textContent = `
+      #wav-filename-wrap {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        height: 32px;
+        padding: 0 9px;
+        border: 1px solid var(--line, #2b2b2d);
+        border-radius: 6px;
+        background: var(--panel, #151517);
+        font: 600 9px/1 var(--mono, monospace);
+        letter-spacing: .08em;
+        color: var(--sub, #8f8f96);
+        box-sizing: border-box;
+      }
+      #wav-filename-wrap input {
+        width: 145px;
+        min-width: 0;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: var(--text, #e7e7ea);
+        font: 500 11px/1 var(--mono, monospace);
+      }
+      #wav-filename-wrap input:focus {
+        color: var(--accent, #f0b35b);
+      }
+      #wav-filename-wrap.disabled {
+        opacity: .45;
+      }
+      #wav-filename-wrap input:disabled {
+        cursor: not-allowed;
+      }
+      @media (max-width: 700px) {
+        #wav-filename-wrap input { width: 100px; }
+      }
+    `;
+    document.head.appendChild(style);
+
     // Enable/disable together with the WAV export button.
     const syncDisabled = () => {
       filenameInput.disabled = !!btnExport.disabled;
