@@ -1,8 +1,8 @@
-# OTAA_FOLEY 👣
+# HUELLA 👣
 
-**Foley Recorder · Oficios y Técnicas de las Artes Audiovisuales · Cátedra Corti**
+**Laboratorio de Foley · Oficios y Técnicas de las Artes Audiovisuales · Cátedra Corti**
 
-OTAA_FOLEY es una herramienta web para **practicar, grabar, revisar y editar Foley sincronizado con video** desde el navegador.
+**HUELLA** es una herramienta web para **practicar, grabar, revisar y editar Foley sincronizado con video** desde el navegador.
 
 Está pensada para el trabajo pedagógico: permite experimentar con combinaciones de **calzado + superficie**, registrar pasos sobre un video y editar después su posición, nivel y combinación antes de exportar un WAV.
 
@@ -148,11 +148,11 @@ La exportación genera un **WAV estéreo PCM de 48 kHz / 16 bits**.
 
 Los archivos se numeran consecutivamente y se descargan con nombres como:
 
-`Foley Recorder OTAA 1.wav`
+`HUELLA Foley 1.wav`
 
-`Foley Recorder OTAA 2.wav`
+`HUELLA Foley 2.wav`
 
-`Foley Recorder OTAA 3.wav`
+`HUELLA Foley 3.wav`
 
 La numeración se conserva en el navegador mediante almacenamiento local.
 
@@ -181,6 +181,7 @@ OTAA_FOLEY/
 ├── runtime-fixes.js
 ├── reliable-trigger.js
 ├── punch-in-removal.js
+├── branding.js
 ├── library.json
 ├── README.md
 └── samples/
@@ -189,6 +190,8 @@ OTAA_FOLEY/
 `workflow-guard.js` y `rehearsal-playback.js` se conservan en el repositorio por compatibilidad histórica, pero ya no participan del flujo cargado por `index.html`.
 
 `punch-in-removal.js` forma parte de la capa de compatibilidad y elimina cualquier control de Punch-In legado. El flujo actual utiliza únicamente **GRABAR / DETENER / REPRODUCCIÓN / WAV**.
+
+El directorio y la URL histórica del repositorio siguen siendo `OTAA_FOLEY` para no romper el despliegue actual de GitHub Pages; la identidad pública de la aplicación es **HUELLA**.
 
 ## Funciones pendientes
 
