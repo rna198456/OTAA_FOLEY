@@ -1,7 +1,6 @@
 /* export-fix.js — HUELLA
  * Exportación WAV única y explícita.
  * Toma el nombre del campo ARCHIVO y escribe en la carpeta elegida.
- * Captura el clic antes de los listeners legacy de app.js/branding.js.
  */
 'use strict';
 
@@ -26,7 +25,7 @@
     }
   }
 
-  function filename() {
+  function getFilename() {
     const input = document.getElementById('wav-filename');
     let value = input ? input.value.trim() : '';
     value = value.replace(/\.wav$/i, '');
@@ -36,7 +35,11 @@
 
   function updateFolderLabel() {
     const label = document.getElementById('wav-folder-label');
-    if (label) label.textContent = directoryHandle ? `📁 ${directoryHandle.name}` : (supportsPicker() ? '📁 CARPETA DE EXPORTACIÓN' : '📥 DESCARGA DEL NAVEGADOR');
+    if (label) {
+      label.textContent = directoryHandle
+        ? `📁 ${directoryHandle.name}`
+        : (supportsPicker() ? '📁 CARPETA DE EXPORTACIÓN' : '📥 DESCARGA DEL NAVEGADOR');
+    }
     const button = document.getElementById('wav-folder-change');
     if (button) button.textContent = directoryHandle ? 'Cambiar' : 'Elegir';
   }
@@ -51,7 +54,10 @@
       status(`📁 ${handle.name}`, true);
       return true;
     } catch (err) {
-      if (err?.name !== 'AbortError') console.warn('HUELLA: selector de carpeta', err);
+      if (err?.name !== 'AbortError') {
+        console.warn('HUELLA: selector de carpeta', err);
+        status('No se pudo seleccionar la carpeta', true);
+      }
       return false;
     } finally {
       choosing = false;
@@ -62,10 +68,13 @@
     if (!directoryHandle) return false;
     try {
       let permission = await directoryHandle.queryPermission({ mode: 'readwrite' });
-      if (permission !== 'granted') permission = await directoryHandle.requestPermission({ mode: 'readwrite' });
+      if (permission !== 'granted') {
+        permission = await directoryHandle.requestPermission({ mode: 'readwrite' });
+      }
       if (permission !== 'granted') return false;
-      const file = await directoryHandle.getFileHandle(name, { create: true });
-      const writable = await file.createWritable();
+
+      const fileHandle = await directoryHandle.getFileHandle(name, { create: true });
+      const writable = await fileHandle.createWritable();
       await writable.write(blob);
       await writable.close();
       return true;
@@ -76,29 +85,43 @@
   }
 
   async function exportWav() {
-    if (exporting || !window.S?.events?.length) return;
+    if (exporting) return;
+    // S is a top-level lexical binding in app.js, not a window property.
+    if (typeof S === 'undefined' || !Array.isArray(S.events) || !S.events.length) {
+      status('No hay eventos para exportar', true);
+      return;
+    }
+
     exporting = true;
     btnExport.disabled = true;
-    const name = filename();
+    const name = getFilename();
     status(`Renderizando 48 kHz · ${name}`);
 
     try {
+      // Open the picker before any render await, while still inside the user's gesture.
       if (!directoryHandle && supportsPicker()) {
-        // Must happen during the user's click activation, before render/awaits.
         await chooseFolder();
       }
 
       const blob = await AudioEngine.renderToWav(S.events, S.videoDuration, 48000);
+      if (!(blob instanceof Blob) || blob.size === 0) {
+        throw new Error('El render WAV devolvió un archivo vacío.');
+      }
 
-      if (directoryHandle && await saveInFolder(blob, name)) {
-        status(`✓ Guardado · ${name}`, true);
-        return;
+      if (directoryHandle) {
+        const saved = await saveInFolder(blob, name);
+        if (saved) {
+          status(`✓ Guardado · ${name}`, true);
+          return;
+        }
+        status('No se pudo guardar en la carpeta · usando descarga normal');
       }
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = name;
+      a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -106,15 +129,14 @@
       status(`✓ WAV 48 kHz descargado · ${name}`, true);
     } catch (err) {
       console.error('HUELLA WAV export:', err);
-      status('Error: ' + (err?.message || err), true);
+      status('Error: ' + (err?.message || String(err)), true);
     } finally {
       exporting = false;
       btnExport.disabled = false;
     }
   }
 
-  // This is the key: document capture executes before the button reaches
-  // app.js or branding.js listeners, so there is only one active exporter.
+  // Capture at document level so legacy app.js/branding.js handlers never run.
   document.addEventListener('click', event => {
     if (event.target === btnExport || btnExport.contains(event.target)) {
       event.preventDefault();
@@ -124,7 +146,6 @@
     }
   }, true);
 
-  // Folder button is also captured so its action uses this module's handle.
   document.addEventListener('click', event => {
     const button = document.getElementById('wav-folder-change');
     if (!button) return;
