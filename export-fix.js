@@ -1,6 +1,7 @@
 /* export-fix.js — HUELLA
  * Exportación WAV única y explícita.
  * Toma el nombre del campo ARCHIVO y escribe en la carpeta elegida.
+ * Confirma antes de reemplazar un WAV existente.
  */
 'use strict';
 
@@ -73,10 +74,30 @@
       }
       if (permission !== 'granted') return false;
 
+      // Check first, without creating anything.
+      let exists = false;
+      try {
+        await directoryHandle.getFileHandle(name, { create: false });
+        exists = true;
+      } catch (err) {
+        if (err?.name !== 'NotFoundError') throw err;
+      }
+
+      if (exists) {
+        const replace = window.confirm(`El archivo "${name}" ya existe en la carpeta seleccionada.\n\n¿Querés reemplazarlo?`);
+        if (!replace) {
+          status(`Exportación cancelada · ${name} ya existe`, true);
+          return 'cancelled';
+        }
+      }
+
       const fileHandle = await directoryHandle.getFileHandle(name, { create: true });
       const writable = await fileHandle.createWritable();
-      await writable.write(blob);
-      await writable.close();
+      try {
+        await writable.write(blob);
+      } finally {
+        await writable.close();
+      }
       return true;
     } catch (err) {
       console.warn('HUELLA: escritura WAV', err);
@@ -86,7 +107,6 @@
 
   async function exportWav() {
     if (exporting) return;
-    // S is a top-level lexical binding in app.js, not a window property.
     if (typeof S === 'undefined' || !Array.isArray(S.events) || !S.events.length) {
       status('No hay eventos para exportar', true);
       return;
@@ -98,7 +118,6 @@
     status(`Renderizando 48 kHz · ${name}`);
 
     try {
-      // Open the picker before any render await, while still inside the user's gesture.
       if (!directoryHandle && supportsPicker()) {
         await chooseFolder();
       }
@@ -110,10 +129,11 @@
 
       if (directoryHandle) {
         const saved = await saveInFolder(blob, name);
-        if (saved) {
+        if (saved === true) {
           status(`✓ Guardado · ${name}`, true);
           return;
         }
+        if (saved === 'cancelled') return;
         status('No se pudo guardar en la carpeta · usando descarga normal');
       }
 
@@ -136,7 +156,6 @@
     }
   }
 
-  // Capture at document level so legacy app.js/branding.js handlers never run.
   document.addEventListener('click', event => {
     if (event.target === btnExport || btnExport.contains(event.target)) {
       event.preventDefault();
