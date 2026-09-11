@@ -44,8 +44,6 @@
     if (!S.videoLoaded || S.isRecording) return;
 
     // Never carry a preview transport state into a new recording pass.
-    // This is important because final-fixes.js intentionally blocks timeline
-    // editing while S.isPreviewing is true.
     if (S.isPreviewing && typeof window.stopPreview === 'function') {
       window.stopPreview();
     } else {
@@ -84,11 +82,13 @@
     }, true);
   }
 
-  // Keep the transport usable after every recording pass and explicitly clear
-  // any stale preview state so the timeline becomes seekable immediately.
-  if (typeof stopRecording === 'function' && playbackBtn) {
+  // Build a real wrapper around the current implementation and intercept the
+  // existing button listener in capture phase, since app.js already registered
+  // its callback before this compatibility layer was loaded.
+  let wrappedStopRecording = null;
+  if (typeof stopRecording === 'function') {
     const originalStopRecording = stopRecording;
-    stopRecording = function (...args) {
+    wrappedStopRecording = function (...args) {
       const result = originalStopRecording.apply(this, args);
       S.isPreviewing = false;
       S.previewTimers?.forEach(clearTimeout);
@@ -97,6 +97,15 @@
       if (typeof drawWaveform === 'function') drawWaveform();
       return result;
     };
+    stopRecording = wrappedStopRecording;
+  }
+
+  if (btnStop && wrappedStopRecording) {
+    btnStop.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      wrappedStopRecording();
+    }, true);
   }
 
   // ── Preview preparation ────────────────────────────────────────────────
@@ -148,8 +157,6 @@
   }
 
   // ── Space = playback transport ────────────────────────────────────────
-  // Capture at window level so keyboard focus never has to be placed on the
-  // button first. During recording final-fixes.js owns Space as Foley trigger.
   window.addEventListener('keydown', event => {
     if (event.code !== 'Space' || event.repeat) return;
     const target = event.target;
