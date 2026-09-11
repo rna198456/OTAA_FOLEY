@@ -17,7 +17,6 @@
 
   const btnTrigger = document.getElementById('btn-trigger');
   const video = document.getElementById('video-el');
-  const playbackBtn = document.getElementById('btn-preview');
   if (!btnTrigger || !video) return;
 
   const bags = new Map();
@@ -112,14 +111,12 @@
     }
   }
 
-  // Replace sidebar trigger path before app.js gets its pointerdown callback.
   btnTrigger.addEventListener('pointerdown', event => {
     event.preventDefault();
     event.stopImmediatePropagation();
     if (!btnTrigger.disabled) triggerReliable();
   }, true);
 
-  // Replace recording Space path before document-level handlers.
   window.addEventListener('keydown', event => {
     if (event.code !== 'Space' || event.repeat) return;
     const target = event.target;
@@ -131,7 +128,7 @@
     triggerReliable();
   }, true);
 
-  // After lateral footwear/surface changes, start loading every actual layer.
+  // After lateral footwear/surface changes, preload the complete active set.
   document.addEventListener('pointerup', event => {
     const el = event.target?.closest?.('.fw-btn, .surf-check');
     if (!el) return;
@@ -143,6 +140,19 @@
     }, 0);
   }, true);
 
-  // Expose for the rest of the app if needed.
+  // After applying an individual or group combination, prepare every edited
+  // event immediately rather than waiting for the next preview.
+  document.addEventListener('click', event => {
+    const el = event.target?.closest?.('#modal-content .btn-amber');
+    if (!el) return;
+    setTimeout(() => {
+      if (typeof normalizeEvents === 'function') normalizeEvents();
+      const allLayers = (S.events || []).flatMap(ev => ev.layers || []);
+      if (typeof AudioEngine.preloadLayers === 'function' && allLayers.length) {
+        AudioEngine.preloadLayers(allLayers).catch(() => {});
+      }
+    }, 0);
+  }, true);
+
   window.triggerReliableFoley = triggerReliable;
 })();
