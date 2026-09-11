@@ -36,6 +36,21 @@
       height: 62px !important;
     }
 
+    /* The canvas renderer keeps its original internal 120 px bitmap while
+       live mode visually compresses it. The tiny time labels at the bottom
+       therefore become illegible; hide only that label strip while live. */
+    body.huella-live #waveform-outer::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 12px;
+      background: #0D0D0F;
+      pointer-events: none;
+      z-index: 2;
+    }
+
     body.huella-live #timeline-panel {
       padding-top: 5px;
       padding-bottom: 6px;
@@ -57,6 +72,9 @@
       body.huella-live #waveform {
         height: 56px !important;
       }
+      body.huella-live #waveform-outer::after {
+        height: 10px;
+      }
       body.huella-edit #waveform {
         height: 112px !important;
       }
@@ -72,6 +90,11 @@
     lastLive = live;
     document.body.classList.toggle('huella-live', live);
     document.body.classList.toggle('huella-edit', !live);
+
+    /* Let the latest layout state redraw through the existing renderer. */
+    if (typeof drawWaveform === 'function') {
+      requestAnimationFrame(() => drawWaveform());
+    }
   }
 
   // Keep the state synchronized with native video transport events.
