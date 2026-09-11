@@ -5,19 +5,29 @@
 
 #waveform-outer {
   min-height:120px;
+  padding-bottom:58px;
 }
 
 .event-tooltip {
   z-index:50;
   max-width:min(420px, calc(100vw - 24px));
-  transform:translateY(calc(-100% - 8px));
+  transform:none;
+  top:auto;
 }
 
 .event-tooltip::before {
-  top:auto;
-  bottom:-5px;
-  border-bottom:0;
-  border-top:5px solid var(--border);
+  top:-5px;
+  bottom:auto;
+  border-top:0;
+  border-bottom:5px solid var(--border);
+}
+
+#tooltip-delete {
+  cursor:pointer;
+}
+
+#tooltip-delete:hover {
+  background:rgba(232,64,58,.12);
 }
 
 #tooltip-meta {
@@ -98,6 +108,7 @@
   }
   #waveform-outer {
     min-height:120px;
+    padding-bottom:72px;
   }
   .event-tooltip {
     min-width:190px;
