@@ -1,0 +1,30 @@
+/* layout-tuning.css — HUELLA
+ * Ajuste visual moderado: más área útil para referencia de video.
+ * No modifica la lógica de timeline, audio, eventos ni exportación.
+ */
+
+/* Más ancho para el video: la biblioteca conserva toda su funcionalidad. */
+#library-col{
+  width:270px;
+}
+
+/* Recuperar unos píxeles verticales para la referencia visual. */
+#video-col{
+  padding:10px;
+  gap:8px;
+}
+
+#timeline-panel{
+  padding:7px 10px 8px;
+  gap:5px;
+}
+
+@media(max-width:700px){
+  #video-col{
+    padding:8px;
+    gap:6px;
+  }
+  #timeline-panel{
+    padding:7px 8px 8px;
+  }
+}
