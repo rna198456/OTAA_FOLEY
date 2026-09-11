@@ -35,7 +35,9 @@ Se pueden combinar una o más superficies y ajustar individualmente su nivel.
 
 Al pulsar **GRABAR**, el video comienza desde la posición actual. Cada disparo crea una instrucción en la timeline.
 
-La tecla **Espacio** se utiliza exclusivamente durante la grabación para disparar la combinación seleccionada.
+La grabación es **incremental**: iniciar una nueva pasada no borra los eventos ya registrados en la misma sesión.
+
+La tecla **Espacio** se utiliza durante la grabación para disparar la combinación seleccionada.
 
 Cada evento conserva:
 
@@ -44,9 +46,22 @@ Cada evento conserva:
 - superficies;
 - nivel general;
 - nivel de cada superficie;
-- sample/paso utilizado en cada capa.
+- índice del sample utilizado por cada capa.
 
-### 5. REPRODUCCIÓN
+### 5. Selección aleatoria de samples
+
+Cada combinación de **calzado + superficie** dispone de un **shuffle-bag independiente**.
+
+El sistema:
+
+- utiliza todos los samples disponibles antes de repetir;
+- evita repetir inmediatamente el último sample al comenzar una nueva ronda;
+- mantiene una secuencia independiente para cada combinación;
+- guarda en cada evento el sample realmente utilizado para que la reproducción y la exportación sean deterministas.
+
+Al cambiar el calzado o las superficies de un grupo de instrucciones, los eventos editados vuelven a tomar samples mediante el mismo shuffle-bag de la nueva combinación. No se expone un selector manual de sample en la edición de grupo.
+
+### 6. REPRODUCCIÓN
 
 **REPRODUCCIÓN** es el único control de transporte.
 
@@ -72,30 +87,37 @@ La dirección inicial del movimiento determina el parámetro que se edita.
 
 El volumen también puede modificarse desde el fader del menú del evento.
 
+El botón **⇄** permite cambiar la combinación de un evento conservando su posición temporal, identidad y nivel general.
+
 ### Selección múltiple
 
 Arrastrando sobre una **zona vacía de la timeline** se crea una selección temporal. Todos los eventos incluidos en ese rango quedan resaltados para que sea evidente cuáles están seleccionados.
 
-Cuando existe una selección aparece **BORRAR SELECCIÓN**. También se puede usar **Supr** o **Backspace** para borrar las instrucciones seleccionadas.
+Cuando existe una selección aparecen las herramientas de grupo para:
 
-### Cambio de combinación / sample
+- ajustar el volumen del grupo;
+- cambiar calzado y superficies;
+- limpiar la selección.
 
-El botón **⇄** del menú del evento abre el editor de combinación.
+También se puede usar **Supr** o **Backspace** para borrar las instrucciones seleccionadas.
 
-Desde allí se puede cambiar:
+### Cambio de combinación en grupo
+
+**CAMBIAR GRUPO** permite modificar simultáneamente las instrucciones seleccionadas.
+
+Se puede cambiar:
 
 - calzado;
-- superficies;
-- nivel de cada superficie;
-- paso/sample exacto de cada capa.
+- una o más superficies;
+- nivel de cada superficie.
 
-El evento conserva su **posición temporal, identidad y nivel general** al aplicar los cambios.
+El sistema conserva el tiempo y el volumen de cada evento. Al aplicar una nueva combinación, cada evento recibe el siguiente sample correspondiente a esa combinación mediante el shuffle-bag compartido con el sistema de grabación.
 
 ### Zoom
 
 La timeline tiene zoom progresivo hasta **128×**.
 
-Los botones de zoom mantienen enfocada la posición del evento seleccionado o, en su defecto, el playhead. El zoom con rueda sigue la posición del cursor.
+Los controles de zoom mantienen enfocada la posición del evento seleccionado o, en su defecto, el playhead. El zoom con rueda sigue la posición del cursor.
 
 ### Undo / Redo
 
@@ -105,10 +127,6 @@ Los botones de zoom mantienen enfocada la posición del evento seleccionado o, e
 
 El historial cubre las principales operaciones de edición de la sesión.
 
-### Punch-in
-
-**PUNCH-IN** permite reemplazar solamente una parte de la sesión definiendo **IN** y **OUT** en segundos.
-
 ## Motor de audio
 
 El audio se gestiona mediante **Web Audio API**.
@@ -117,7 +135,8 @@ El sistema:
 
 - carga y decodifica los WAV;
 - mantiene los samples en caché;
-- reproduce capas en tiempo real;
+- precarga las capas necesarias;
+- reproduce las capas seleccionadas simultáneamente;
 - conserva el sample usado por cada evento;
 - renderiza offline para exportación.
 
@@ -125,7 +144,7 @@ Si un WAV no puede cargarse, existe un fallback sintético procedural.
 
 ## Exportación WAV
 
-La exportación genera un **WAV estéreo PCM de 48 kHz / 24 bits**.
+La exportación genera un **WAV estéreo PCM de 48 kHz / 16 bits**.
 
 Los archivos se numeran consecutivamente y se descargan con nombres como:
 
@@ -156,16 +175,20 @@ OTAA_FOLEY/
 ├── audio.js
 ├── mobile-fix.js
 ├── enhancements.js
-├── workflow-guard.js
-├── rehearsal-playback.js
 ├── final-fixes.js
 ├── interaction-polish.js
+├── group-edit.js
+├── runtime-fixes.js
+├── reliable-trigger.js
+├── punch-in-removal.js
 ├── library.json
 ├── README.md
 └── samples/
 ```
 
 `workflow-guard.js` y `rehearsal-playback.js` se conservan en el repositorio por compatibilidad histórica, pero ya no participan del flujo cargado por `index.html`.
+
+`punch-in-removal.js` forma parte de la capa de compatibilidad y elimina cualquier control de Punch-In legado. El flujo actual utiliza únicamente **GRABAR / DETENER / REPRODUCCIÓN / WAV**.
 
 ## Funciones pendientes
 
