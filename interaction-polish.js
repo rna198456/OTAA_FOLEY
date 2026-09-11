@@ -1,10 +1,13 @@
 /* interaction-polish.js — OTAA_FOLEY
- * Final compatibility / sample-editing layer.
+ * Final compatibility / interaction layer.
  *
- * - Stops the legacy mouse/touch canvas handlers from competing with the
+ * - Stops legacy mouse/touch canvas handlers from competing with the
  *   consolidated pointer-event timeline interaction.
  * - Extends the event combination menu so each active surface can choose
  *   the exact recorded sample/step (rrIdx).
+ * - Keeps REPRODUCCIÓN available as soon as a video is loaded.
+ * - Allows a simple click on an empty timeline area to seek the video.
+ * - Reuses the existing ✕ button as a close button for the event popup.
  */
 'use strict';
 
@@ -12,12 +15,17 @@
   if (typeof S === 'undefined') return;
 
   const canvas = document.getElementById('waveform');
+  const video = document.getElementById('video-el');
+  const playbackBtn = document.getElementById('btn-preview');
   const modalOverlay = document.getElementById('modal-overlay');
   const modalContent = document.getElementById('modal-content');
+  const tooltipDelete = document.getElementById('tooltip-delete');
+
   if (!canvas || !modalOverlay || !modalContent) return;
 
-  // The consolidated pointer-event layer owns the timeline. Prevent the old
-  // mousedown/touchstart handlers in app.js from executing as well.
+  // ── Legacy canvas compatibility ────────────────────────────────────────
+  // final-fixes.js owns the timeline through Pointer Events. These handlers
+  // stop the old app.js mouse/touch path from running in parallel.
   ['mousedown', 'mousemove', 'mouseup', 'mouseleave', 'touchstart', 'touchmove', 'touchend'].forEach(type => {
     canvas.addEventListener(type, event => {
       if (S.isRecording) return;
@@ -25,7 +33,66 @@
     }, true);
   });
 
-  // Explicit sample/step selector in the event editor.
+  // ── Video / playback availability ──────────────────────────────────────
+  // app.js intentionally resets REPRODUCCIÓN to disabled when metadata arrives.
+  // In the new workflow the button is also the normal video transport, so it
+  // must be available immediately after a valid video has been loaded.
+  function enablePlaybackForLoadedVideo() {
+    if (!playbackBtn || !video) return;
+    if (S.videoLoaded || Number.isFinite(video.duration) && video.duration > 0) {
+      S.videoLoaded = true;
+      if (!S.videoDuration && Number.isFinite(video.duration)) S.videoDuration = video.duration;
+      playbackBtn.disabled = false;
+    }
+  }
+  ['loadedmetadata', 'durationchange', 'canplay'].forEach(type => {
+    video?.addEventListener(type, enablePlaybackForLoadedVideo);
+  });
+  enablePlaybackForLoadedVideo();
+
+  // ── Seek on empty timeline click ───────────────────────────────────────
+  // A click directly on an event remains an event selection. A simple click on
+  // free timeline space becomes a video seek; a drag still belongs to the
+  // multi-selection interaction from final-fixes.js.
+  canvas.addEventListener('click', event => {
+    if (S.isRecording || S.isPreviewing || !S.videoLoaded) return;
+    if (event.defaultPrevented) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const width = Math.max(1, canvas.offsetWidth);
+    const visibleDuration = (S.videoDuration || 10) / Math.max(1, S.zoom || 1);
+    const timeAtX = S.scrollOffset + (x / width) * visibleDuration;
+
+    let eventHit = false;
+    for (const ev of S.events) {
+      const ex = ((ev.time - S.scrollOffset) / Math.max(0.000001, visibleDuration)) * width;
+      if (Math.abs(ex - x) <= 14) {
+        eventHit = true;
+        break;
+      }
+    }
+    if (eventHit) return;
+
+    video.currentTime = Math.max(0, Math.min(S.videoDuration, timeAtX));
+    if (typeof drawWaveform === 'function') drawWaveform();
+  }, true);
+
+  // ── Event popup close ───────────────────────────────────────────────────
+  // The existing ✕ used to delete the selected event. It is now the explicit
+  // close control requested for the popup. Deletion remains available through
+  // Delete/Backspace and the multi-selection delete action.
+  if (tooltipDelete) {
+    tooltipDelete.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (typeof hideTooltip === 'function') hideTooltip();
+    }, true);
+    tooltipDelete.title = 'Cerrar';
+    tooltipDelete.setAttribute('aria-label', 'Cerrar');
+  }
+
+  // ── Combination + sample editor ────────────────────────────────────────
   openChangeModal = function (evId) {
     const target = S.events.find(ev => ev.id === evId);
     if (!target) return;
@@ -38,6 +105,7 @@
     modalContent.appendChild(info);
 
     let tempFw = (S.lib.footwear || []).find(f => f.id === target.layers?.[0]?.fwId) || S.lib.footwear?.[0];
+    if (!tempFw) return;
 
     const fwRow = document.createElement('div');
     fwRow.className = 'fw-grid';
@@ -68,7 +136,7 @@
 
     function renderSampleSelect(container, surf, data) {
       const samples = Array.isArray(surf.samples) ? surf.samples : [];
-      if (!samples.length) return;
+      if (!samples.length) return null;
 
       const sampleRow = document.createElement('div');
       sampleRow.className = 'sample-select-row';
@@ -82,7 +150,7 @@
         const option = document.createElement('option');
         option.value = String(index);
         option.textContent = sample.label || `Paso ${index + 1}`;
-        if (index === Number(data.rrIdx ?? 0)) option.selected = true;
+        option.selected = index === Number(data.rrIdx ?? 0);
         select.appendChild(option);
       });
       select.addEventListener('change', () => {
@@ -92,6 +160,7 @@
       sampleRow.appendChild(label);
       sampleRow.appendChild(select);
       container.appendChild(sampleRow);
+      return sampleRow;
     }
 
     function addSurfaceRow(surf) {
@@ -103,8 +172,8 @@
       cb.style.borderColor = tempSurfs[surf.id] ? (surf.color || '') : '';
       cb.innerHTML = `<span class="surf-emoji">${surf.emoji}</span><span class="surf-name">${surf.label}</span>`;
 
-      const fader = document.createElement('div');
       const data = tempSurfs[surf.id] || { gainMult: 1, rrIdx: 0 };
+      const fader = document.createElement('div');
       fader.className = 'surf-fader-wrap' + (tempSurfs[surf.id] ? '' : ' hidden');
       fader.innerHTML = `<input type="range" class="surf-fader" min="0" max="200" step="1" value="${Math.round((data.gainMult ?? 1) * 100)}"/><span class="surf-fader-val">${Math.round((data.gainMult ?? 1) * 100)}%</span>`;
       fader.querySelector('input').addEventListener('input', event => {
@@ -113,6 +182,11 @@
         fader.querySelector('.surf-fader-val').textContent = event.target.value + '%';
       });
 
+      let sampleRow = null;
+      if (tempSurfs[surf.id]) {
+        sampleRow = renderSampleSelect(row, surf, tempSurfs[surf.id]);
+      }
+
       cb.addEventListener('click', () => {
         if (tempSurfs[surf.id]) {
           delete tempSurfs[surf.id];
@@ -120,25 +194,20 @@
           cb.style.borderColor = '';
           fader.classList.add('hidden');
           sampleRow?.remove();
+          sampleRow = null;
         } else {
           tempSurfs[surf.id] = { gainMult: 1, rrIdx: 0 };
           cb.classList.add('selected');
           cb.style.borderColor = surf.color || '';
           fader.classList.remove('hidden');
-          renderSampleSelect(row, surf, tempSurfs[surf.id]);
+          sampleRow = renderSampleSelect(row, surf, tempSurfs[surf.id]);
         }
       });
 
       row.appendChild(cb);
       row.appendChild(fader);
-
-      let sampleRow = null;
-      if (tempSurfs[surf.id]) {
-        const before = row.children.length;
-        renderSampleSelect(row, surf, tempSurfs[surf.id]);
-        sampleRow = row.children[before];
-      }
-
+      // renderSampleSelect appends after the fader, preserving the visual
+      // structure: surface button → fader → PASO/sample selector.
       surfWrap.appendChild(row);
     }
 
@@ -164,9 +233,9 @@
       S.selectedEvId = current.id;
 
       closeModal();
-      drawWaveform();
-      positionTooltip();
-      rebuildLog();
+      if (typeof drawWaveform === 'function') drawWaveform();
+      if (typeof positionTooltip === 'function') positionTooltip();
+      if (typeof rebuildLog === 'function') rebuildLog();
     });
     modalContent.appendChild(apply);
     modalOverlay.classList.remove('hidden');
