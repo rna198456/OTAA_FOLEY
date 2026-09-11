@@ -7,7 +7,9 @@
  *   - event volume as a common relative adjustment
  *
  * Sample/step selection is NOT exposed here. Time and event identity remain
- * unchanged; existing sample indices are preserved whenever possible.
+ * unchanged. When a footwear/surface combination is applied, each resulting
+ * layer receives the next sample from the same shuffle-bag used by live
+ * recording, so edited groups keep the global random/no-repeat behavior.
  */
 'use strict';
 
@@ -268,7 +270,7 @@
 
     const hint = document.createElement('div');
     hint.style.cssText = 'font:8px var(--mono);color:var(--dark);margin-top:8px';
-    hint.textContent = 'Elegí calzado y una o más superficies. El paso/sample existente de cada evento se conserva.';
+    hint.textContent = 'Elegí calzado y una o más superficies. Los eventos conservan tiempo y volumen; sus samples se reasignan siguiendo el orden aleatorio global.';
     content.appendChild(hint);
 
     const apply = document.createElement('button');
@@ -287,16 +289,16 @@
       }));
 
       currentTargets.forEach(ev => {
-        const oldLayers = ev.layers || [];
-        ev.layers = nextLayers.map(layer => {
-          const old = oldLayers.find(l => l.surface?.id === layer.surface?.id);
-          return {
-            fwId: layer.fwId,
-            surface: layer.surface,
-            gainMult: layer.gainMult,
-            rrIdx: old?.rrIdx ?? 0,
-          };
-        });
+        ev.layers = nextLayers.map(layer => ({
+          fwId: layer.fwId,
+          surface: layer.surface,
+          gainMult: layer.gainMult,
+          // Do NOT preserve the old rrIdx here. The edited combination must
+          // participate in the same shuffle-bag as live recordings.
+          rrIdx: typeof window.allocateFoleySampleIndex === 'function'
+            ? window.allocateFoleySampleIndex(layer.fwId, layer.surface)
+            : 0,
+        }));
         ev.label = `${tempFw.emoji} ${tempFw.label} · ${ev.layers.map(l => l.surface?.label || '').join('+')}`;
         ev.color = ev.layers[0]?.surface?.color || '#D4870A';
       });
