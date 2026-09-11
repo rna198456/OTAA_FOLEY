@@ -1,9 +1,13 @@
 /* group-edit.js — OTAA_FOLEY
  * Group editing + keyboard transport.
  *
- * Keeps group editing separate from the individual event editor. It mirrors
- * the empty-area selection gesture and applies one common footwear/surface/
- * sample configuration to every selected event, preserving id/time/gain.
+ * Group editor intentionally only changes:
+ *   - footwear
+ *   - active surfaces + their layer gains
+ *   - event volume as a common relative adjustment
+ *
+ * Sample/step selection is NOT exposed here. Time and event identity remain
+ * unchanged; existing sample indices are preserved whenever possible.
  */
 'use strict';
 
@@ -13,27 +17,42 @@
   const canvas = document.getElementById('waveform');
   const timelinePanel = document.getElementById('timeline-panel');
   const video = document.getElementById('video-el');
-  if (!canvas || !timelinePanel || !video) return;
+  const overlay = document.getElementById('modal-overlay');
+  const content = document.getElementById('modal-content');
+  if (!canvas || !timelinePanel || !video || !overlay || !content) return;
 
   let groupSelection = new Set();
   let selectGesture = null;
 
   const visibleDuration = () => (S.videoDuration || 10) / Math.max(1, S.zoom || 1);
-  const xToTime = x => S.scrollOffset + (x / Math.max(1, canvas.offsetWidth)) * visibleDuration();
   const timeToX = t => ((t - S.scrollOffset) / Math.max(0.000001, visibleDuration())) * canvas.offsetWidth;
+  const xToTime = x => S.scrollOffset + (x / Math.max(1, canvas.offsetWidth)) * visibleDuration();
 
   const bar = document.createElement('div');
   bar.id = 'group-edit-bar';
   bar.style.cssText = [
     'display:none', 'align-items:center', 'justify-content:space-between', 'gap:8px',
-    'padding:5px 0', 'font-family:var(--mono)', 'font-size:8px', 'color:var(--amber)'
+    'padding:5px 0', 'font-family:var(--mono)', 'font-size:8px', 'color:var(--amber)',
+    'flex-wrap:wrap'
   ].join(';');
-  bar.innerHTML = '<span id="group-edit-label"></span><div style="display:flex;gap:5px"><button id="group-edit-change" type="button" style="border:1px solid var(--amber);background:rgba(212,135,10,.08);color:var(--amber);border-radius:4px;padding:5px 8px;font:600 8px var(--mono);cursor:pointer">CAMBIAR GRUPO</button><button id="group-edit-clear" type="button" style="border:1px solid var(--border);background:transparent;color:var(--sub);border-radius:4px;padding:5px 7px;font:600 8px var(--mono);cursor:pointer">LIMPIAR</button></div>';
+  bar.innerHTML = `
+    <span id="group-edit-label"></span>
+    <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+      <button id="group-edit-volume" type="button" style="border:1px solid var(--border);background:transparent;color:var(--sub);border-radius:4px;padding:5px 8px;font:600 8px var(--mono);cursor:pointer">VOLUMEN GRUPO</button>
+      <button id="group-edit-change" type="button" style="border:1px solid var(--amber);background:rgba(212,135,10,.08);color:var(--amber);border-radius:4px;padding:5px 8px;font:600 8px var(--mono);cursor:pointer">CAMBIAR GRUPO</button>
+      <button id="group-edit-clear" type="button" style="border:1px solid var(--border);background:transparent;color:var(--sub);border-radius:4px;padding:5px 7px;font:600 8px var(--mono);cursor:pointer">LIMPIAR</button>
+    </div>`;
   timelinePanel.insertBefore(bar, document.getElementById('progress-wrap'));
 
   const label = bar.querySelector('#group-edit-label');
   const changeBtn = bar.querySelector('#group-edit-change');
+  const volumeBtn = bar.querySelector('#group-edit-volume');
   const clearBtn = bar.querySelector('#group-edit-clear');
+
+  function redraw() {
+    if (typeof drawWaveform === 'function') drawWaveform();
+    updateBar();
+  }
 
   function updateBar() {
     const n = groupSelection.size;
@@ -41,12 +60,7 @@
     label.textContent = n ? `${n} INSTRUCCIÓN${n === 1 ? '' : 'ES'} SELECCIONADA${n === 1 ? '' : 'S'}` : '';
   }
 
-  function render() {
-    if (typeof drawWaveform === 'function') drawWaveform();
-    updateBar();
-  }
-
-  function selectedEventsFromRange(a, b) {
+  function selectRange(a, b) {
     const t1 = xToTime(Math.min(a, b));
     const t2 = xToTime(Math.max(a, b));
     const ids = new Set();
@@ -56,7 +70,9 @@
     return ids;
   }
 
-  // Mirror the final-fixes empty-area selection gesture.
+  // Synchronize the group selection with the same empty-area drag used by the
+  // main timeline interaction layer. This listener runs during document capture,
+  // before the canvas target handler is reached.
   document.addEventListener('pointerdown', e => {
     if (e.target !== canvas || e.button !== 0 || S.isRecording || S.isPreviewing || !S.videoLoaded) return;
     const r = canvas.getBoundingClientRect();
@@ -69,8 +85,6 @@
       updateBar();
       return;
     }
-    // Any new gesture in free space starts a fresh selection. A plain tap is
-    // still used by the timeline as a seek operation, not as a selection.
     groupSelection.clear();
     updateBar();
     selectGesture = { x, y, pointerId: e.pointerId, currentX: x, moved: false };
@@ -91,42 +105,94 @@
     const g = selectGesture;
     selectGesture = null;
     if (!g.moved || S.isRecording || S.isPreviewing || !S.videoLoaded) return;
-    groupSelection = selectedEventsFromRange(g.x, g.currentX);
+    groupSelection = selectRange(g.x, g.currentX);
     S.selectedEvId = groupSelection.size === 1 ? [...groupSelection][0] : null;
     if (typeof hideTooltip === 'function') hideTooltip();
-    render();
+    window.__otaaGroupSelection = new Set(groupSelection);
+    redraw();
   }, true);
 
   document.addEventListener('pointercancel', e => {
     if (selectGesture?.pointerId === e.pointerId) selectGesture = null;
   }, true);
 
-  function clearGroupSelection() {
-    groupSelection.clear();
-    if (typeof hideTooltip === 'function') hideTooltip();
-    render();
-  }
-
   clearBtn.addEventListener('click', e => {
     e.preventDefault(); e.stopImmediatePropagation();
-    clearGroupSelection();
+    groupSelection.clear();
+    window.__otaaGroupSelection = new Set();
+    if (typeof hideTooltip === 'function') hideTooltip();
+    redraw();
   }, true);
 
-  // Apply the same configuration to all selected events.
+  function openVolumeModal() {
+    const targets = S.events.filter(ev => groupSelection.has(ev.id));
+    if (!targets.length) return;
+
+    const title = document.querySelector('#modal-box .modal-title');
+    if (title) title.textContent = 'Volumen del grupo';
+    content.innerHTML = '';
+
+    const info = document.createElement('p');
+    info.style.cssText = 'font-size:11px;color:var(--sub);margin-bottom:12px;font-family:var(--mono)';
+    info.textContent = `Ajuste conjunto de ${targets.length} instrucciones. Se conserva la diferencia de volumen entre ellas.`;
+    content.appendChild(info);
+
+    const initialAverage = targets.reduce((sum, ev) => sum + (ev.gain ?? 1), 0) / targets.length;
+
+    const value = document.createElement('div');
+    value.style.cssText = 'text-align:center;font:600 12px var(--mono);color:var(--amber);margin:8px 0 10px';
+    value.textContent = `${Math.round(initialAverage * 100)}%`;
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0'; slider.max = '200'; slider.step = '1';
+    slider.value = String(Math.round(initialAverage * 100));
+    slider.style.cssText = 'width:100%;height:5px;accent-color:var(--amber);cursor:pointer';
+
+    const initialGains = new Map(targets.map(ev => [ev.id, ev.gain ?? 1]));
+    slider.addEventListener('input', () => {
+      const requestedAverage = Number(slider.value) / 100;
+      const delta = requestedAverage - initialAverage;
+      targets.forEach(ev => {
+        const base = initialGains.get(ev.id) ?? 1;
+        ev.gain = Math.max(0, Math.min(2, base + delta));
+      });
+      value.textContent = `${Math.round(requestedAverage * 100)}%`;
+      if (typeof rebuildLog === 'function') rebuildLog();
+      redraw();
+    });
+
+    const helper = document.createElement('div');
+    helper.style.cssText = 'font:8px var(--mono);color:var(--dark);margin-top:8px;text-align:center';
+    helper.textContent = 'Todos suben o bajan la misma cantidad.';
+    content.appendChild(value);
+    content.appendChild(slider);
+    content.appendChild(helper);
+
+    const done = document.createElement('button');
+    done.className = 'btn btn-amber btn-sm';
+    done.style.cssText = 'width:100%;margin-top:14px';
+    done.textContent = 'LISTO';
+    done.addEventListener('click', e => {
+      e.preventDefault(); e.stopImmediatePropagation();
+      overlay.classList.add('hidden');
+      if (title) title.textContent = 'Cambiar combinación del evento';
+    });
+    content.appendChild(done);
+    overlay.classList.remove('hidden');
+  }
+
   function openGroupModal() {
     const targets = S.events.filter(ev => groupSelection.has(ev.id));
     if (!targets.length || !S.lib) return;
 
-    const overlay = document.getElementById('modal-overlay');
-    const content = document.getElementById('modal-content');
     const title = document.querySelector('#modal-box .modal-title');
-    if (!overlay || !content) return;
-
     if (title) title.textContent = 'Cambiar combinación del grupo';
     content.innerHTML = '';
+
     const info = document.createElement('p');
     info.style.cssText = 'font-size:11px;color:var(--sub);margin-bottom:10px;font-family:var(--mono)';
-    info.textContent = `Editar ${targets.length} instrucciones a la vez. Se conservarán tiempo y volumen de cada una.`;
+    info.textContent = `Editar ${targets.length} instrucciones a la vez. Se conservarán tiempo y volumen.`;
     content.appendChild(info);
 
     let tempFw = (S.lib.footwear || []).find(f => f.id === targets[0].layers?.[0]?.fwId) || S.lib.footwear?.[0];
@@ -139,7 +205,8 @@
       const b = document.createElement('button');
       b.className = 'fw-btn' + (fw.id === tempFw.id ? ' selected' : '');
       b.innerHTML = `<span class="fw-emoji">${fw.emoji}</span><span class="fw-label">${fw.label}</span>`;
-      b.addEventListener('click', () => {
+      b.addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation();
         tempFw = fw;
         fwRow.querySelectorAll('.fw-btn').forEach(x => x.classList.toggle('selected', x === b));
       });
@@ -147,9 +214,15 @@
     });
     content.appendChild(fwRow);
 
+    // A surface is initially active only when it is shared by every selected
+    // event. This avoids silently inheriting a surface from just the first one.
+    const commonIds = (S.lib.surfaces || []).filter(surf =>
+      targets.every(ev => (ev.layers || []).some(layer => layer.surface?.id === surf.id))
+    ).map(surf => surf.id);
     const tempSurfs = {};
-    (targets[0].layers || []).forEach(layer => {
-      if (layer.surface?.id) tempSurfs[layer.surface.id] = { gainMult: layer.gainMult ?? 1, rrIdx: layer.rrIdx ?? 0 };
+    commonIds.forEach(sid => {
+      const layer = targets[0].layers.find(l => l.surface?.id === sid);
+      tempSurfs[sid] = { gainMult: layer?.gainMult ?? 1 };
     });
 
     const surfWrap = document.createElement('div');
@@ -157,85 +230,73 @@
       const row = document.createElement('div');
       row.className = 'surface-row';
       const active = !!tempSurfs[surf.id];
+
       const cb = document.createElement('button');
       cb.className = 'surf-check' + (active ? ' selected' : '');
       cb.style.borderColor = active ? (surf.color || '') : '';
       cb.innerHTML = `<span class="surf-emoji">${surf.emoji}</span><span class="surf-name">${surf.label}</span>`;
 
-      const data = tempSurfs[surf.id] || { gainMult: 1, rrIdx: 0 };
       const fader = document.createElement('div');
       fader.className = 'surf-fader-wrap' + (active ? '' : ' hidden');
-      fader.innerHTML = `<input type="range" class="surf-fader" min="0" max="200" step="1" value="${Math.round((data.gainMult ?? 1) * 100)}"/><span class="surf-fader-val">${Math.round((data.gainMult ?? 1) * 100)}%</span>`;
-      fader.querySelector('input').addEventListener('input', ev => {
-        if (!tempSurfs[surf.id]) tempSurfs[surf.id] = { gainMult: 1, rrIdx: 0 };
-        tempSurfs[surf.id].gainMult = Number(ev.target.value) / 100;
-        fader.querySelector('.surf-fader-val').textContent = ev.target.value + '%';
+      fader.innerHTML = `<input type="range" class="surf-fader" min="0" max="200" step="1" value="${Math.round((tempSurfs[surf.id]?.gainMult ?? 1) * 100)}"/><span class="surf-fader-val">${Math.round((tempSurfs[surf.id]?.gainMult ?? 1) * 100)}%</span>`;
+      fader.querySelector('input').addEventListener('input', e => {
+        if (!tempSurfs[surf.id]) tempSurfs[surf.id] = { gainMult: 1 };
+        tempSurfs[surf.id].gainMult = Number(e.target.value) / 100;
+        fader.querySelector('.surf-fader-val').textContent = e.target.value + '%';
       });
 
-      let sampleRow = null;
-      function addSampleSelect() {
-        const samples = Array.isArray(surf.samples) ? surf.samples : [];
-        if (!samples.length) return null;
-        const sr = document.createElement('div');
-        sr.className = 'sample-select-row';
-        const lab = document.createElement('span');
-        lab.className = 'sample-select-label';
-        lab.textContent = 'PASO';
-        const select = document.createElement('select');
-        select.className = 'sample-select';
-        samples.forEach((sample, index) => {
-          const op = document.createElement('option');
-          op.value = String(index);
-          op.textContent = sample.label || `Paso ${index + 1}`;
-          op.selected = index === Number(tempSurfs[surf.id]?.rrIdx ?? 0);
-          select.appendChild(op);
-        });
-        select.addEventListener('change', () => {
-          if (!tempSurfs[surf.id]) tempSurfs[surf.id] = { gainMult: 1, rrIdx: 0 };
-          tempSurfs[surf.id].rrIdx = Number(select.value);
-        });
-        sr.appendChild(lab); sr.appendChild(select);
-        return sr;
-      }
-      if (active) sampleRow = addSampleSelect();
-
-      cb.addEventListener('click', () => {
+      cb.addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation();
         if (tempSurfs[surf.id]) {
           delete tempSurfs[surf.id];
-          cb.classList.remove('selected'); cb.style.borderColor = '';
+          cb.classList.remove('selected');
+          cb.style.borderColor = '';
           fader.classList.add('hidden');
-          sampleRow?.remove(); sampleRow = null;
         } else {
-          tempSurfs[surf.id] = { gainMult: 1, rrIdx: 0 };
-          cb.classList.add('selected'); cb.style.borderColor = surf.color || '';
+          tempSurfs[surf.id] = { gainMult: 1 };
+          cb.classList.add('selected');
+          cb.style.borderColor = surf.color || '';
           fader.classList.remove('hidden');
-          sampleRow = addSampleSelect();
-          if (sampleRow) row.appendChild(sampleRow);
         }
       });
 
       row.appendChild(cb);
       row.appendChild(fader);
-      if (sampleRow) row.appendChild(sampleRow);
       surfWrap.appendChild(row);
     });
     content.appendChild(surfWrap);
+
+    const hint = document.createElement('div');
+    hint.style.cssText = 'font:8px var(--mono);color:var(--dark);margin-top:8px';
+    hint.textContent = 'Elegí calzado y una o más superficies. El paso/sample existente de cada evento se conserva.';
+    content.appendChild(hint);
 
     const apply = document.createElement('button');
     apply.className = 'btn btn-amber btn-sm';
     apply.style.cssText = 'width:100%;margin-top:10px';
     apply.textContent = 'APLICAR AL GRUPO';
-    apply.addEventListener('click', () => {
-      if (!Object.keys(tempSurfs).length) return;
-      const sharedLayers = Object.entries(tempSurfs).map(([sid, data]) => ({
+    apply.addEventListener('click', e => {
+      e.preventDefault(); e.stopImmediatePropagation();
+      const currentTargets = S.events.filter(ev => groupSelection.has(ev.id));
+      if (!currentTargets.length || !Object.keys(tempSurfs).length) return;
+
+      const nextLayers = Object.entries(tempSurfs).map(([sid, data]) => ({
         fwId: tempFw.id,
         surface: (S.lib.surfaces || []).find(s => s.id === sid),
         gainMult: data.gainMult,
-        rrIdx: data.rrIdx ?? 0,
       }));
 
-      targets.forEach(ev => {
-        ev.layers = sharedLayers.map(layer => ({ ...layer }));
+      currentTargets.forEach(ev => {
+        const oldLayers = ev.layers || [];
+        ev.layers = nextLayers.map(layer => {
+          const old = oldLayers.find(l => l.surface?.id === layer.surface?.id);
+          return {
+            fwId: layer.fwId,
+            surface: layer.surface,
+            gainMult: layer.gainMult,
+            rrIdx: old?.rrIdx ?? 0,
+          };
+        });
         ev.label = `${tempFw.emoji} ${tempFw.label} · ${ev.layers.map(l => l.surface?.label || '').join('+')}`;
         ev.color = ev.layers[0]?.surface?.color || '#D4870A';
       });
@@ -244,7 +305,7 @@
       overlay.classList.add('hidden');
       if (title) title.textContent = 'Cambiar combinación del evento';
       S.selectedEvId = null;
-      render();
+      redraw();
     });
     content.appendChild(apply);
     overlay.classList.remove('hidden');
@@ -255,22 +316,10 @@
     openGroupModal();
   }, true);
 
-  // Space: recording = Foley trigger (handled by final-fixes); otherwise it is
-  // the playback transport and toggles PLAY/STOP from the current playhead.
-  document.addEventListener('keydown', e => {
-    if (e.code !== 'Space' || e.repeat) return;
-    const t = e.target;
-    if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
-    if (S.isRecording) return;
-    if (!S.videoLoaded || typeof startPreview !== 'function') return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    if (S.isPreviewing) {
-      if (typeof stopPreview === 'function') stopPreview();
-    } else {
-      startPreview();
-    }
-  }, false);
+  volumeBtn.addEventListener('click', e => {
+    e.preventDefault(); e.stopImmediatePropagation();
+    openVolumeModal();
+  }, true);
 
   updateBar();
 })();
