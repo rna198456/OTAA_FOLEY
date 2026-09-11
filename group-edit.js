@@ -17,7 +17,6 @@
 
   let groupSelection = new Set();
   let selectGesture = null;
-  let lastSelectedRange = null;
 
   const visibleDuration = () => (S.videoDuration || 10) / Math.max(1, S.zoom || 1);
   const xToTime = x => S.scrollOffset + (x / Math.max(1, canvas.offsetWidth)) * visibleDuration();
@@ -73,8 +72,10 @@
 
   document.addEventListener('pointermove', e => {
     if (!selectGesture || e.pointerId !== selectGesture.pointerId) return;
-    if (Math.hypot(e.clientX - (canvas.getBoundingClientRect().left + selectGesture.x), e.clientY - (canvas.getBoundingClientRect().top + selectGesture.y)) <= 6) return;
     const r = canvas.getBoundingClientRect();
+    const dx = (e.clientX - r.left) - selectGesture.x;
+    const dy = (e.clientY - r.top) - selectGesture.y;
+    if (Math.hypot(dx, dy) <= 6) return;
     selectGesture.currentX = e.clientX - r.left;
     selectGesture.moved = true;
   }, true);
@@ -85,8 +86,8 @@
     selectGesture = null;
     if (!g.moved || S.isRecording || S.isPreviewing || !S.videoLoaded) return;
     groupSelection = selectedEventsFromRange(g.x, g.currentX);
-    lastSelectedRange = { a: g.x, b: g.currentX };
     S.selectedEvId = groupSelection.size === 1 ? [...groupSelection][0] : null;
+    if (typeof hideTooltip === 'function') hideTooltip();
     render();
   }, true);
 
@@ -96,7 +97,6 @@
 
   function clearGroupSelection() {
     groupSelection.clear();
-    lastSelectedRange = null;
     if (typeof hideTooltip === 'function') hideTooltip();
     render();
   }
@@ -113,8 +113,10 @@
 
     const overlay = document.getElementById('modal-overlay');
     const content = document.getElementById('modal-content');
+    const title = document.querySelector('#modal-box .modal-title');
     if (!overlay || !content) return;
 
+    if (title) title.textContent = 'Cambiar combinación del grupo';
     content.innerHTML = '';
     const info = document.createElement('p');
     info.style.cssText = 'font-size:11px;color:var(--sub);margin-bottom:10px;font-family:var(--mono)';
@@ -140,8 +142,7 @@
     content.appendChild(fwRow);
 
     const tempSurfs = {};
-    const firstLayers = targets[0].layers || [];
-    firstLayers.forEach(layer => {
+    (targets[0].layers || []).forEach(layer => {
       if (layer.surface?.id) tempSurfs[layer.surface.id] = { gainMult: layer.gainMult ?? 1, rrIdx: layer.rrIdx ?? 0 };
     });
 
@@ -149,7 +150,6 @@
     (S.lib.surfaces || []).forEach(surf => {
       const row = document.createElement('div');
       row.className = 'surface-row';
-
       const active = !!tempSurfs[surf.id];
       const cb = document.createElement('button');
       cb.className = 'surf-check' + (active ? ' selected' : '');
@@ -172,7 +172,9 @@
         if (!samples.length) return null;
         const sr = document.createElement('div');
         sr.className = 'sample-select-row';
-        sr.innerHTML = `<span class="sample-select-label">PASO</span>`;
+        const lab = document.createElement('span');
+        lab.className = 'sample-select-label';
+        lab.textContent = 'PASO';
         const select = document.createElement('select');
         select.className = 'sample-select';
         samples.forEach((sample, index) => {
@@ -186,7 +188,7 @@
           if (!tempSurfs[surf.id]) tempSurfs[surf.id] = { gainMult: 1, rrIdx: 0 };
           tempSurfs[surf.id].rrIdx = Number(select.value);
         });
-        sr.appendChild(select);
+        sr.appendChild(lab); sr.appendChild(select);
         return sr;
       }
       if (active) sampleRow = addSampleSelect();
@@ -202,6 +204,7 @@
           cb.classList.add('selected'); cb.style.borderColor = surf.color || '';
           fader.classList.remove('hidden');
           sampleRow = addSampleSelect();
+          if (sampleRow) row.appendChild(sampleRow);
         }
       });
 
@@ -226,15 +229,15 @@
       }));
 
       targets.forEach(ev => {
-        ev.layers = sharedLayers.map(layer => ({ ...layer, surface: layer.surface ? { ...layer.surface } : layer.surface }));
+        ev.layers = sharedLayers.map(layer => ({ ...layer }));
         ev.label = `${tempFw.emoji} ${tempFw.label} · ${ev.layers.map(l => l.surface?.label || '').join('+')}`;
         ev.color = ev.layers[0]?.surface?.color || '#D4870A';
       });
 
       if (typeof rebuildLog === 'function') rebuildLog();
       overlay.classList.add('hidden');
+      if (title) title.textContent = 'Cambiar combinación del evento';
       S.selectedEvId = null;
-      if (typeof positionTooltip === 'function') positionTooltip();
       render();
     });
     content.appendChild(apply);
