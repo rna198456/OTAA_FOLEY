@@ -108,27 +108,6 @@
     }
   }
 
-  // Public export bridge used directly by app.js. This avoids intercepting
-  // HTMLAnchorElement.click(), which is unreliable around async rendering.
-  window.HuellaExport = {
-    async prepare() {
-      return ensureExportDirectory();
-    },
-    getFilename,
-    async save(blob, filename) {
-      if (exportDirectoryHandle) {
-        const saved = await saveBlobToDirectory(blob, filename);
-        if (saved) {
-          setExportStatus(`✓ Guardado · ${filename}`, true);
-          return true;
-        }
-        setExportStatus('No se pudo guardar en la carpeta · descarga del navegador', true);
-      }
-      return false;
-    },
-    setStatus: setExportStatus
-  };
-
   // ── Editable WAV filename ──────────────────────────────────────────────
   if (btnExport && controlsRow && !document.getElementById('wav-filename')) {
     const filenameWrap = document.createElement('label');
@@ -236,5 +215,55 @@
     });
 
     updateFolderUI();
+  }
+
+  // ── WAV export — capture the button before app.js ──────────────────────
+  // app.js has a legacy export listener registered earlier. This capture-phase
+  // listener stops it and performs the complete export using the filename
+  // currently visible in the editable field.
+  if (btnExport) {
+    btnExport.addEventListener('click', async event => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      if (!S.events.length) return;
+
+      btnExport.disabled = true;
+      const filename = getFilename();
+      setExportStatus('Renderizando 48 kHz…');
+
+      try {
+        // First export: choose destination before rendering, so the user's
+        // gesture remains attached to the directory picker permission request.
+        await ensureExportDirectory();
+
+        const blob = await AudioEngine.renderToWav(S.events, S.videoDuration, 48000);
+
+        if (exportDirectoryHandle) {
+          const saved = await saveBlobToDirectory(blob, filename);
+          if (saved) {
+            setExportStatus(`✓ Guardado · ${filename}`, true);
+            return;
+          }
+          setExportStatus('No se pudo guardar en la carpeta · descarga del navegador');
+        }
+
+        // Fallback for unsupported browsers or cancelled/failed directory access.
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+        setExportStatus(`✓ WAV 48 kHz descargado · ${filename}`, true);
+      } catch (err) {
+        console.error('HUELLA WAV export:', err);
+        setExportStatus('Error: ' + (err?.message || err), true);
+      } finally {
+        btnExport.disabled = false;
+      }
+    }, true);
   }
 })();
