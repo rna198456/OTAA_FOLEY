@@ -8,7 +8,9 @@
  *   once before any sample repeats (when there are multiple samples);
  * - all selected surfaces play together on the same trigger;
  * - the exact rrIdx used is stored in the recorded event for deterministic
- *   preview/export later.
+ *   preview/export later;
+ * - editing a group can request the next sample from the same shuffle-bag,
+ *   so edited events do not all fall back to sample 1 or retain one old index.
  */
 'use strict';
 
@@ -61,6 +63,17 @@
     }).filter(layer => layer.surface);
   }
 
+  // Shared allocator used both by live recording and by group editing.
+  // This is deliberately the SAME shuffle-bag used by triggerReliable(),
+  // so every footwear+surface combination advances through all available WAVs
+  // before repeating, regardless of whether the event came from recording or
+  // from a later group edit.
+  function allocateSampleIndex(fwId, surface) {
+    const total = Array.isArray(surface?.samples) ? surface.samples.length : 0;
+    const key = `${fwId}_${surface?.id}`;
+    return nextIndex(key, total);
+  }
+
   async function triggerReliable() {
     if (busy || !S.videoLoaded) return;
     const layers = canonicalize(layersFromCurrentSelection());
@@ -75,9 +88,7 @@
 
       const now = AudioEngine.getCtx().currentTime + 0.01;
       const playable = layers.map(layer => {
-        const total = Array.isArray(layer.surface?.samples) ? layer.surface.samples.length : 0;
-        const key = `${layer.fwId}_${layer.surface.id}`;
-        const rrIdx = nextIndex(key, total);
+        const rrIdx = allocateSampleIndex(layer.fwId, layer.surface);
         return { ...layer, rrIdx };
       });
 
@@ -155,4 +166,5 @@
   }, true);
 
   window.triggerReliableFoley = triggerReliable;
+  window.allocateFoleySampleIndex = allocateSampleIndex;
 })();
