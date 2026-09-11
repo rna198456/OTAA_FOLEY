@@ -43,6 +43,17 @@
   function startIncrementalRecording() {
     if (!S.videoLoaded || S.isRecording) return;
 
+    // Never carry a preview transport state into a new recording pass.
+    // This is important because final-fixes.js intentionally blocks timeline
+    // editing while S.isPreviewing is true.
+    if (S.isPreviewing && typeof window.stopPreview === 'function') {
+      window.stopPreview();
+    } else {
+      S.isPreviewing = false;
+      S.previewTimers?.forEach(clearTimeout);
+      S.previewTimers = [];
+    }
+
     AudioEngine.getCtx();
     S.startTimecode = video.currentTime;
     S.isRecording = true;
@@ -73,12 +84,17 @@
     }, true);
   }
 
-  // Keep the transport usable after every recording pass.
+  // Keep the transport usable after every recording pass and explicitly clear
+  // any stale preview state so the timeline becomes seekable immediately.
   if (typeof stopRecording === 'function' && playbackBtn) {
     const originalStopRecording = stopRecording;
     stopRecording = function (...args) {
       const result = originalStopRecording.apply(this, args);
+      S.isPreviewing = false;
+      S.previewTimers?.forEach(clearTimeout);
+      S.previewTimers = [];
       if (S.videoLoaded && !S.isRecording) playbackBtn.disabled = false;
+      if (typeof drawWaveform === 'function') drawWaveform();
       return result;
     };
   }
@@ -123,7 +139,11 @@
     window.stopPreview = function () {
       preparing = false;
       originalStopPreview();
+      S.isPreviewing = false;
+      S.previewTimers?.forEach(clearTimeout);
+      S.previewTimers = [];
       playbackBtn.disabled = !S.videoLoaded;
+      if (typeof drawWaveform === 'function') drawWaveform();
     };
   }
 
