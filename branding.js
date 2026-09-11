@@ -1,5 +1,5 @@
 /* branding.js — HUELLA
- * Visible brand layer.
+ * Visible brand layer + WAV export destination.
  */
 'use strict';
 
@@ -10,9 +10,6 @@
   const controlsRow = document.getElementById('controls-row');
   const exportStatus = document.getElementById('export-status');
 
-  // ── Export-folder state ────────────────────────────────────────────────
-  // The folder handle is kept only for the current page session. It is never
-  // persisted, so a reload starts a new folder-selection session.
   let exportDirectoryHandle = null;
   let choosingDirectory = false;
 
@@ -31,8 +28,8 @@
   function sanitizeFilename(value) {
     let requested = (value || '').trim();
     if (!requested) requested = 'HUELLA Foley 1';
-    requested = requested.replace(/\\.wav$/i, '');
-    requested = requested.replace(/[\\/:*?"<>|]/g, '_').replace(/[\\u0000-\\u001F]/g, '').trim();
+    requested = requested.replace(/\.wav$/i, '');
+    requested = requested.replace(/[\\/:*?"<>|]/g, '_').replace(/[\u0000-\u001F]/g, '').trim();
     return requested || 'HUELLA Foley 1';
   }
 
@@ -69,8 +66,6 @@
       setExportStatus(`📁 ${handle.name}`, true);
       return true;
     } catch (error) {
-      // User cancellation is normal. Other errors are reported briefly, then
-      // the export falls back to the browser's normal download mechanism.
       if (error?.name !== 'AbortError') {
         console.warn('HUELLA: no se pudo seleccionar la carpeta de exportación.', error);
         setExportStatus('Carpeta no disponible · descarga del navegador', true);
@@ -82,6 +77,12 @@
       choosingDirectory = false;
       updateFolderUI();
     }
+  }
+
+  async function ensureExportDirectory() {
+    if (exportDirectoryHandle) return true;
+    if (!supportsDirectoryPicker()) return false;
+    return chooseExportDirectory({required: true});
   }
 
   async function saveBlobToDirectory(blob, filename) {
@@ -107,9 +108,28 @@
     }
   }
 
+  // Public export bridge used directly by app.js. This avoids intercepting
+  // HTMLAnchorElement.click(), which is unreliable around async rendering.
+  window.HuellaExport = {
+    async prepare() {
+      return ensureExportDirectory();
+    },
+    getFilename,
+    async save(blob, filename) {
+      if (exportDirectoryHandle) {
+        const saved = await saveBlobToDirectory(blob, filename);
+        if (saved) {
+          setExportStatus(`✓ Guardado · ${filename}`, true);
+          return true;
+        }
+        setExportStatus('No se pudo guardar en la carpeta · descarga del navegador', true);
+      }
+      return false;
+    },
+    setStatus: setExportStatus
+  };
+
   // ── Editable WAV filename ──────────────────────────────────────────────
-  // The field sits immediately beside the WAV button. The extension is added
-  // automatically, and invalid filename characters are removed on export.
   if (btnExport && controlsRow && !document.getElementById('wav-filename')) {
     const filenameWrap = document.createElement('label');
     filenameWrap.id = 'wav-filename-wrap';
@@ -159,32 +179,17 @@
         color: var(--text, #e7e7ea);
         font: 500 11px/1 var(--mono, monospace);
       }
-      #wav-filename-wrap input:focus {
-        color: var(--accent, #f0b35b);
-      }
-      #wav-filename-wrap.disabled,
-      #wav-folder-wrap.disabled {
-        opacity: .45;
-      }
-      #wav-filename-wrap input:disabled,
-      #wav-folder-change:disabled {
-        cursor: not-allowed;
-      }
+      #wav-filename-wrap input:focus { color: var(--accent, #f0b35b); }
+      #wav-filename-wrap.disabled, #wav-folder-wrap.disabled { opacity: .45; }
+      #wav-filename-wrap input:disabled, #wav-folder-change:disabled { cursor: not-allowed; }
       #wav-folder-wrap {
         max-width: 255px;
         font: 600 9px/1 var(--mono, monospace);
         letter-spacing: .05em;
         color: var(--sub, #8f8f96);
       }
-      #wav-folder-wrap.has-folder {
-        color: var(--text, #e7e7ea);
-      }
-      #wav-folder-label {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        max-width: 178px;
-      }
+      #wav-folder-wrap.has-folder { color: var(--text, #e7e7ea); }
+      #wav-folder-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 178px; }
       #wav-folder-change {
         flex: 0 0 auto;
         border: 0;
@@ -196,9 +201,7 @@
         font: 600 9px/1 var(--mono, monospace);
         letter-spacing: .04em;
       }
-      #wav-folder-change:hover:not(:disabled) {
-        color: var(--accent, #f0b35b);
-      }
+      #wav-folder-change:hover:not(:disabled) { color: var(--accent, #f0b35b); }
       @media (max-width: 700px) {
         #wav-filename-wrap input { width: 100px; }
         #wav-folder-wrap { max-width: 170px; }
@@ -207,7 +210,6 @@
     `;
     document.head.appendChild(style);
 
-    // Enable/disable together with the WAV export button.
     const syncDisabled = () => {
       filenameInput.disabled = !!btnExport.disabled;
       filenameWrap.classList.toggle('disabled', filenameInput.disabled);
@@ -219,9 +221,6 @@
     syncDisabled();
     new MutationObserver(syncDisabled).observe(btnExport, { attributes: true, attributeFilter: ['disabled'] });
 
-    // ── Export folder selector ───────────────────────────────────────────
-    // On the first WAV export, ask for a destination folder. If the user
-    // cancels or the browser does not support the API, normal download remains.
     const folderWrap = document.createElement('div');
     folderWrap.id = 'wav-folder-wrap';
     folderWrap.innerHTML = `
@@ -236,43 +235,6 @@
       await chooseExportDirectory();
     });
 
-    // Must happen on the original WAV button's user gesture, before the export
-    // engine starts asynchronous rendering. This keeps the browser permission
-    // request associated with the user's click.
-    btnExport.addEventListener('click', () => {
-      if (!exportDirectoryHandle && supportsDirectoryPicker()) {
-        void chooseExportDirectory({required: true});
-      }
-    }, true);
-
     updateFolderUI();
   }
-
-  // ── Export filename + folder override ──────────────────────────────────
-  // The original exporter creates a Blob URL and clicks a temporary <a>. We
-  // intercept that final click so WAVs can be written directly to the selected
-  // folder without changing the audio rendering engine.
-  const originalAnchorClick = HTMLAnchorElement.prototype.click;
-  HTMLAnchorElement.prototype.click = async function () {
-    if (typeof this.download === 'string' && /\.wav$/i.test(this.download)) {
-      const filename = getFilename();
-      this.download = filename;
-
-      if (exportDirectoryHandle) {
-        try {
-          const response = await fetch(this.href);
-          const blob = await response.blob();
-          const saved = await saveBlobToDirectory(blob, filename);
-          if (saved) {
-            setExportStatus(`✓ Guardado · ${filename}`, true);
-            return;
-          }
-        } catch (error) {
-          console.warn('HUELLA: falló la exportación directa a carpeta.', error);
-        }
-        setExportStatus('No se pudo guardar en la carpeta · descarga del navegador', true);
-      }
-    }
-    return originalAnchorClick.call(this);
-  };
 })();
