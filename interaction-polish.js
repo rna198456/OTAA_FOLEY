@@ -6,7 +6,7 @@
  * - Extends the event combination menu so each active surface can choose
  *   the exact recorded sample/step (rrIdx).
  * - Keeps REPRODUCCIÓN available as soon as a video is loaded.
- * - Allows a simple click on an empty timeline area to seek the video.
+ * - Allows a simple tap/click on an empty timeline area to seek the video.
  * - Reuses the existing ✕ button as a close button for the event popup.
  */
 'use strict';
@@ -39,7 +39,7 @@
   // must be available immediately after a valid video has been loaded.
   function enablePlaybackForLoadedVideo() {
     if (!playbackBtn || !video) return;
-    if (S.videoLoaded || Number.isFinite(video.duration) && video.duration > 0) {
+    if (S.videoLoaded || (Number.isFinite(video.duration) && video.duration > 0)) {
       S.videoLoaded = true;
       if (!S.videoDuration && Number.isFinite(video.duration)) S.videoDuration = video.duration;
       playbackBtn.disabled = false;
@@ -50,32 +50,55 @@
   });
   enablePlaybackForLoadedVideo();
 
-  // ── Seek on empty timeline click ───────────────────────────────────────
-  // A click directly on an event remains an event selection. A simple click on
-  // free timeline space becomes a video seek; a drag still belongs to the
-  // multi-selection interaction from final-fixes.js.
-  canvas.addEventListener('click', event => {
+  // ── Reliable seek on an empty timeline tap ──────────────────────────────
+  // Pointer Events on the canvas call preventDefault(), so relying on the
+  // synthetic browser "click" is not reliable on every mouse/touch browser.
+  // Capture the gesture before final-fixes.js receives it, then seek only when
+  // it was a plain tap in free space. Event drags and multi-select drags are
+  // left entirely to final-fixes.js.
+  let tap = null;
+
+  document.addEventListener('pointerdown', event => {
+    if (event.target !== canvas || event.button !== 0) return;
     if (S.isRecording || S.isPreviewing || !S.videoLoaded) return;
-    if (event.defaultPrevented) return;
+    const rect = canvas.getBoundingClientRect();
+    tap = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+      pointerId: event.pointerId,
+    };
+  }, true);
+
+  document.addEventListener('pointerup', event => {
+    if (!tap || event.pointerId !== tap.pointerId) return;
+    const start = tap;
+    tap = null;
+
+    if (S.isRecording || S.isPreviewing || !S.videoLoaded || S.videoDuration <= 0) return;
 
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    if (Math.hypot(x - start.x, y - start.y) > 6) return;
+    if (x < 0 || x > rect.width || y < 0 || y > rect.height) return;
+
     const width = Math.max(1, canvas.offsetWidth);
     const visibleDuration = (S.videoDuration || 10) / Math.max(1, S.zoom || 1);
     const timeAtX = S.scrollOffset + (x / width) * visibleDuration;
 
-    let eventHit = false;
+    // Do not seek when the tap is on a recorded instruction; that gesture is
+    // reserved for selecting/opening/editing that event.
     for (const ev of S.events) {
       const ex = ((ev.time - S.scrollOffset) / Math.max(0.000001, visibleDuration)) * width;
-      if (Math.abs(ex - x) <= 14) {
-        eventHit = true;
-        break;
-      }
+      if (Math.abs(ex - x) <= 14) return;
     }
-    if (eventHit) return;
 
     video.currentTime = Math.max(0, Math.min(S.videoDuration, timeAtX));
     if (typeof drawWaveform === 'function') drawWaveform();
+  }, true);
+
+  document.addEventListener('pointercancel', event => {
+    if (tap?.pointerId === event.pointerId) tap = null;
   }, true);
 
   // ── Event popup close ───────────────────────────────────────────────────
@@ -206,8 +229,6 @@
 
       row.appendChild(cb);
       row.appendChild(fader);
-      // renderSampleSelect appends after the fader, preserving the visual
-      // structure: surface button → fader → PASO/sample selector.
       surfWrap.appendChild(row);
     }
 
